@@ -1,0 +1,17 @@
+专注写作，也真正拥有自己的文件。
+
+续墨是一款本地优先的 Markdown 编辑器。通过 Android 系统选择器授权文件夹，直接编辑其中的标准 Markdown 文件，并继续使用你信任的存储与同步工具。
+
+即时渲染编辑
+在干净的排版界面中写作，同时完整保留底层 Markdown 源码；也可随时切换到源码模式。支持 CommonMark、GitHub Flavored Markdown、Front Matter、脚注、公式、Mermaid、代码块、Wiki Link 与反向链接。
+
+可选 AI，自选服务商
+可配置 OpenAI 兼容接口、OpenAI Responses、Anthropic Messages、Google Gemini，也支持 Ollama 等无需密钥的本地服务。续墨不内置 API Key，也不提供模型中转。行内预测出现在光标处，选区 AI 修改始终先预览、后应用。
+
+工作区感知，边界清晰
+搜索与检索在设备本地完成。AI 请求只携带当前片段和少量明确披露的相关内容，不会上传整个工作区。密钥由 Android Keystore 保护。
+
+为写作而生
+自动保存、崩溃恢复、本地版本、外部修改冲突保护、附件、全文检索，以及 Markdown、HTML、PDF 和纯文本导出均已内置。支持中英文界面、深浅色主题、手机、平板和实体键盘。
+
+无需账号。没有续墨云端。首版没有分析和广告。

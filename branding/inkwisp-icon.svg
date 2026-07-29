@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 108 108" role="img" aria-labelledby="title desc">
+  <title id="title">InkWisp app icon</title>
+  <desc id="desc">A dark ink stroke forming a subtle W with a vermilion ink drop.</desc>
+  <rect width="108" height="108" fill="#F7F3EA"/>
+  <path fill="#1C1B19" d="M24 40C29 50 33 62 39 74C42 80 48 80 51 73L58 57L65 73C68 80 74 80 78 73C84 61 88 49 91 37L82 34C79 45 76 55 71 65L62 43C60 38 55 38 53 43L44 65C40 55 37 46 33 36Z"/>
+  <path fill="#B74432" d="M73 20S65 29 65 35C65 40 68.8 44 73.5 44C78.2 44 82 40 82 35C82 29 73 20 73 20Z"/>
+</svg>
+

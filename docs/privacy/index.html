@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Privacy policy for the InkWisp Android app.">
+  <title>InkWisp Privacy Policy / 续墨隐私政策</title>
+  <style>
+    :root { color-scheme:light dark; --paper:#f5f0e6; --ink:#211f1b; --muted:#716c63; --red:#b84c38; --line:#d7cec0; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:Georgia,"Noto Serif SC",serif; }
+    main { width:min(760px,calc(100% - 40px)); margin:auto; padding:64px 0 96px; }
+    a { color:var(--red); text-underline-offset:4px; }
+    .brand { color:var(--red); font:600 12px/1.2 system-ui,sans-serif; letter-spacing:.13em; }
+    h1 { margin:14px 0 12px; font-size:clamp(36px,7vw,56px); line-height:1.06; letter-spacing:-.03em; }
+    h2 { margin:42px 0 8px; font-size:24px; }
+    p,li { font-size:17px; line-height:1.75; }
+    .meta,.muted { color:var(--muted); }
+    hr { border:0; border-top:1px solid var(--line); margin:62px 0; }
+    @media (prefers-color-scheme:dark) { :root { --paper:#171613; --ink:#f0eadf; --muted:#bbb3a8; --red:#d98370; --line:#3b3731; } }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">INKWISP / 续墨</div>
+  <h1>Privacy Policy</h1>
+  <p class="meta">Effective date: July 29, 2026</p>
+  <p>InkWisp (续墨) is an open-source, local-first Markdown editor published by <strong>JerryWu (GitHub: Wujerry)</strong>. This policy explains how the official Android application accesses and handles data.</p>
+
+  <h2>Local files</h2>
+  <p>InkWisp accesses only files and folders selected through Android's system file picker. Documents, local search indexes, recovery copies, revision history, application settings, and model credentials are stored on the user's device. InkWisp does not operate an account, synchronization, analytics, or document-storage server.</p>
+  <p>Users can remove workspace access through InkWisp or Android settings. Uninstalling InkWisp deletes app-private settings, credentials, indexes, recovery copies, and revisions; it does not delete user-owned workspace documents or attachments.</p>
+
+  <h2>Optional AI model services</h2>
+  <p>AI features stay disabled until a user configures a model connection and accepts the in-app data-transfer disclosure. When invoked, InkWisp sends the active document excerpt, selected text, and up to four locally retrieved or explicitly referenced workspace passages directly from the device to the endpoint configured by the user. A connection test sends fixed test text and no document content.</p>
+  <p>The publisher does not receive these requests or responses. The configured model provider processes data under its own privacy, retention, and security terms. HTTPS is recommended; user-configured HTTP endpoints, intended for local services, are not encrypted in transit.</p>
+
+  <h2>Credentials and security</h2>
+  <p>Model credentials are encrypted with a device-bound key held by Android Keystore. They are not displayed after storage and are never included in configuration exports, diagnostics, or workspace files.</p>
+
+  <h2>Diagnostics, advertising, and sale</h2>
+  <p>InkWisp does not collect behavioral analytics and the current release contains no remote crash-reporting or advertising SDK. InkWisp does not sell user data. Any future release that adds advertising or diagnostics will update this policy and the Google Play Data safety declaration before publication.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>App-private data remains on the device until the user deletes it or uninstalls InkWisp. User-owned workspace files remain under the user's control. Data sent to a user-configured model endpoint is retained or deleted according to that provider's terms.</p>
+
+  <h2>Children</h2>
+  <p>InkWisp is a general-purpose writing tool and is not directed to children. It does not provide social, chat, or account features.</p>
+
+  <h2>Changes</h2>
+  <p>Material changes will be published in the application and at this public URL before they take effect.</p>
+
+  <h2>Contact</h2>
+  <p>Publisher: <strong>JerryWu (GitHub: Wujerry)</strong><br>Privacy inquiries: <a href="https://github.com/Wujerry/inkwisp/issues/new?template=privacy.yml">submit a privacy inquiry</a><br>Source: <a href="https://github.com/Wujerry/inkwisp">github.com/Wujerry/inkwisp</a></p>
+
+  <hr>
+  <div lang="zh-CN">
+    <h1>续墨隐私政策</h1>
+    <p class="meta">生效日期：2026 年 7 月 29 日</p>
+    <p>续墨（InkWisp）是由 <strong>JerryWu（GitHub：Wujerry）</strong>发布的开源、本地优先 Markdown 编辑器。本政策说明官方 Android 应用如何访问和处理数据。</p>
+    <h2>本地文件</h2>
+    <p>续墨仅访问用户通过 Android 系统文件选择器主动选择的文件和文件夹。文档、本地搜索索引、恢复副本、版本历史、应用设置和模型凭据均保存在用户设备上。续墨不运营账号、同步、行为分析或文档存储服务器。</p>
+    <h2>可选 AI 模型服务</h2>
+    <p>只有在用户配置模型连接并确认应用内数据传输说明后，AI 功能才会启用。调用 AI 时，续墨会从设备直接向用户配置的端点发送当前文档片段、所选文本，以及最多四段本地检索或明确引用的工作区内容。发布者不会接收这些请求或回复，服务商的数据处理、保留与安全条款适用。</p>
+    <h2>凭据与安全</h2>
+    <p>模型凭据使用 Android Keystore 中的设备绑定密钥加密；保存后不再显示，也不会进入配置导出、诊断信息或工作区文件。</p>
+    <h2>保留与删除</h2>
+    <p>应用私有数据会保留在设备上，直到用户删除或卸载续墨。用户自己的工作区文件始终由用户控制。发送到用户配置模型端点的数据，按对应服务商条款保留或删除。</p>
+    <h2>诊断、广告与数据出售</h2>
+    <p>当前版本不收集行为分析数据，不包含远程崩溃报告或广告 SDK，也不出售用户数据。未来版本若加入广告或诊断，会在发布前同步更新本政策和 Google Play“数据安全”声明。</p>
+    <h2>联系</h2>
+    <p>发布者：<strong>JerryWu（GitHub：Wujerry）</strong><br>隐私问题：<a href="https://github.com/Wujerry/inkwisp/issues/new?template=privacy.yml">提交隐私问题</a></p>
+  </div>
+</main>
+</body>
+</html>

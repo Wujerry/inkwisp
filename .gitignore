@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+build/
+**/build/
+editor/node_modules/
+editor/dist/
+app/src/main/assets/editor/
+*.jks
+*.keystore
+keystore.properties
+captures/
+build-artifacts/
+.externalNativeBuild/
+.cxx/

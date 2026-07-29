@@ -1,0 +1,1 @@
+Initial release: local-first Markdown editing, Workspaces, inline AI, custom model connections, recovery, search, backlinks, attachments, and local export.

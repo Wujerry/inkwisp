@@ -1,0 +1,3 @@
+# Use a native Android shell with a local CodeMirror editor core
+
+InkWisp will use Kotlin and Jetpack Compose for the Android application while hosting a bundled CodeMirror 6 Editor Core inside a constrained local WebView. CodeMirror's source-oriented state and decorations fit instant-render Markdown and inline predictions better than building a rich editor from scratch in Compose. The Native Shell remains authoritative for files, recovery, credentials, indexing, settings, and model networking; the WebView loads no remote pages and receives only a narrow validated bridge, accepting lifecycle and integration complexity in exchange for a capable lossless editor core.

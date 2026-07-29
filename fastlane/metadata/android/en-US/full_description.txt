@@ -1,0 +1,17 @@
+Write in Markdown without giving up your files.
+
+InkWisp is a calm, local-first editor built around user-owned folders. Open a workspace through Android's system picker, edit standard Markdown in place, and keep using the storage and synchronization tools you already trust.
+
+INSTANT-RENDER MARKDOWN
+Write in a clean, formatted view while preserving the underlying Markdown source. Switch to full source mode whenever you want. CommonMark, GitHub Flavored Markdown, front matter, footnotes, math, Mermaid, code fences, Wiki Links, and backlinks remain portable text.
+
+OPTIONAL AI, YOUR PROVIDER
+Configure OpenAI-compatible services, OpenAI Responses, Anthropic Messages, Google Gemini, or a local keyless endpoint such as Ollama. InkWisp includes no API key and runs no model proxy. Inline predictions appear at the cursor, while selected-text edits are always reviewed before they replace your writing.
+
+WORKSPACE-AWARE, PRIVACY-BOUND
+Workspace search and retrieval happen on the device. AI requests contain only the active excerpt and a small disclosed set of relevant passages—not an uploaded workspace. Credentials are protected by Android Keystore.
+
+BUILT FOR WRITING
+Autosave, recovery copies, local revisions, external-change conflict protection, attachments, full-text search, and Markdown/HTML/PDF/plain-text export are included. The interface supports English and Simplified Chinese, light and dark themes, phones, tablets, and physical keyboards.
+
+No account. No InkWisp cloud. No analytics. No ads in the first release.

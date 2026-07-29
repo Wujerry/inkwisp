@@ -1,0 +1,33 @@
+name: Privacy inquiry
+description: Ask about InkWisp data access, handling, retention, or deletion.
+title: "[Privacy] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public issue. Do not include API keys, document contents, credentials, addresses, phone numbers, or other sensitive information.
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Data access and collection
+        - AI model data transfer
+        - Local retention and deletion
+        - Credentials and security
+        - Privacy policy correction
+        - Other privacy question
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Describe the question without including private document content or secrets.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: InkWisp version
+      placeholder: e.g. 0.1.0

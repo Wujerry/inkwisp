@@ -1,0 +1,3 @@
+# Launch free and constrain future advertising
+
+InkWisp's first release will be completely free and contain no advertising SDK. A later release may add non-personalized static advertising only at the bottom of the Workspace drawer and on settings surfaces, never in document content, prediction, file-opening, startup, exit, interstitial, or rewarded flows; advertising must not use document data, filenames, Model Connections, or writing content. A future one-time purchase will disable advertising requests entirely. This preserves the editor's minimal, trusted writing experience while leaving a bounded monetization path.

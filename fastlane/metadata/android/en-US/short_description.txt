@@ -1,0 +1,1 @@
+A local-first Markdown editor with inline AI and your own model providers.

@@ -1,0 +1,205 @@
+@font-face {
+  font-family: "Newsreader";
+  src: url("/fonts/newsreader-variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LXGW WenKai Lite";
+  src: url("/fonts/lxgw-wenkai-lite-regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+  --paper: #f5f0e6;
+  --paper-elevated: #fbf7ef;
+  --ink: #211f1b;
+  --muted: #706d66;
+  --accent: #b84c38;
+  --hairline: rgba(33, 31, 27, 0.12);
+  --code: rgba(33, 31, 27, 0.06);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #171614;
+  --paper-elevated: #201e1b;
+  --ink: #f1ece2;
+  --muted: #bdb7ae;
+  --accent: #e18b79;
+  --hairline: rgba(241, 236, 226, 0.14);
+  --code: rgba(241, 236, 226, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: hidden;
+  background: var(--paper);
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#editor {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image:
+    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--ink) 4%, transparent) 0 0.45px, transparent 0.65px),
+    radial-gradient(circle at 75% 62%, color-mix(in srgb, var(--ink) 3%, transparent) 0 0.35px, transparent 0.6px);
+  background-size: 4px 4px, 5px 5px;
+}
+
+.cm-editor {
+  position: relative;
+  height: 100%;
+  background: transparent;
+  color: var(--ink);
+  font-family: "Newsreader", "LXGW WenKai Lite", Georgia, serif;
+  font-size: clamp(18px, 2.2vw, 20px);
+  line-height: 1.78;
+  animation: editor-settle 260ms cubic-bezier(0.2, 0.72, 0.2, 1) both;
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+.cm-scroller {
+  padding: 25px max(24px, env(safe-area-inset-left)) 42vh;
+  font-family: inherit !important;
+}
+
+.cm-content {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  font-family: inherit !important;
+  caret-color: var(--accent);
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink);
+}
+
+.cm-line,
+.cm-line span {
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+}
+
+.cm-line {
+  padding: 1px 0;
+}
+
+.cm-cursor,
+.cm-dropCursor {
+  border-left-color: var(--accent) !important;
+  border-left-width: 2px !important;
+}
+
+.cm-selectionBackground,
+.cm-content ::selection {
+  background: color-mix(in srgb, var(--accent) 20%, transparent) !important;
+}
+
+.cm-gutters {
+  display: none;
+}
+
+.cm-placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.iw-heading {
+  font-family: "Newsreader", "LXGW WenKai Lite", Georgia, serif;
+  font-weight: 650;
+  letter-spacing: -0.024em;
+  padding-top: 0.7em;
+  padding-bottom: 0.14em;
+}
+
+.iw-h1 { font-size: 1.92em; line-height: 1.17; }
+.iw-h2 { font-size: 1.52em; line-height: 1.24; }
+.iw-h3 { font-size: 1.2em; line-height: 1.34; }
+.iw-h4, .iw-h5, .iw-h6 { font-size: 1.04em; line-height: 1.4; }
+.iw-strong { font-weight: 700; }
+.iw-emphasis { font-style: italic; }
+.iw-link { color: var(--accent); text-decoration-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+
+.iw-inline-code {
+  padding: 0.08em 0.32em;
+  border-radius: 0.34em;
+  background: var(--code);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.iw-quote {
+  color: var(--muted);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  padding-left: 0.85em;
+}
+
+.iw-prediction {
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  -webkit-text-fill-color: color-mix(in srgb, var(--muted) 58%, transparent);
+  white-space: pre-wrap;
+  pointer-events: none;
+  animation: prediction-in 180ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+}
+
+:root[data-reduced-motion="true"] .iw-prediction {
+  animation: none;
+}
+
+:root[data-reduced-motion="true"] .cm-editor {
+  animation: none;
+}
+
+@keyframes editor-settle {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes prediction-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.iw-source .cm-content {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace !important;
+  font-size: 15px;
+  line-height: 1.66;
+}

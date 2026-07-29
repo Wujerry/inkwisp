@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">续墨</string>
+    <string name="workspace">工作区</string>
+    <string name="open_workspace">打开工作区</string>
+    <string name="open_document">打开文档</string>
+    <string name="new_document">新建文档</string>
+    <string name="backlinks">反向链接</string>
+    <string name="settings">设置</string>
+    <string name="search">搜索文件</string>
+    <string name="source_mode">源码</string>
+    <string name="instant_mode">即时渲染</string>
+    <string name="saved">已保存</string>
+    <string name="saving">正在保存…</string>
+    <string name="unsaved">未保存</string>
+    <string name="scratch_title">未命名</string>
+    <string name="close">关闭</string>
+    <string name="no_workspace">尚未选择工作区</string>
+    <string name="empty_editor_hint">从写作台打开文件夹或文档。</string>
+    <string name="open_workspace_short">文件夹</string>
+    <string name="open_document_short">文档</string>
+    <string name="new_document_short">新建</string>
+    <string name="insert_image">插入图片</string>
+    <string name="onboarding_title">写下去，文件仍然属于你。</string>
+    <string name="onboarding_local">本地优先的文件夹，无需续墨账号或云端。</string>
+    <string name="onboarding_editor">即时渲染 Markdown，也可完整查看源码。</string>
+    <string name="onboarding_ai">可选行内 AI，只使用你主动配置的模型服务。</string>
+    <string name="start_writing">开始写作</string>
+    <string name="word_count">%1$d 词</string>
+    <string name="context_count">%1$d 个上下文文件</string>
+</resources>
