@@ -21,7 +21,7 @@ class WorkspaceRepository(private val context: Context) {
     suspend fun listFiles(treeUri: Uri): Pair<String, List<WorkspaceFile>> = withContext(Dispatchers.IO) {
         if (treeUri == managedWorkspaceUri) return@withContext listManagedFiles()
         val root = DocumentFile.fromTreeUri(context, treeUri)
-            ?: throw IOException("The selected workspace is unavailable.")
+            ?: throw IOException(context.getString(R.string.workspace_unavailable))
         val result = mutableListOf<WorkspaceFile>()
         collectMarkdownFiles(root, path = "", depth = 0, destination = result)
         (root.name ?: "Workspace") to result.sortedBy { it.relativePath.lowercase() }
@@ -30,7 +30,7 @@ class WorkspaceRepository(private val context: Context) {
     suspend fun read(uri: Uri): String = withContext(Dispatchers.IO) {
         if (uri.scheme == "file") return@withContext File(requireNotNull(uri.path)).readText(Charsets.UTF_8)
         resolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-            ?: throw IOException("Unable to open document.")
+            ?: throw IOException(context.getString(R.string.open_document_failed))
     }
 
     suspend fun readLimited(uri: Uri, maxChars: Int): String = withContext(Dispatchers.IO) {
@@ -45,7 +45,7 @@ class WorkspaceRepository(private val context: Context) {
             val buffer = CharArray(maxChars)
             val count = reader.read(buffer, 0, maxChars)
             if (count <= 0) "" else String(buffer, 0, count)
-        } ?: throw IOException("Unable to index document.")
+        } ?: throw IOException(context.getString(R.string.index_document_failed))
     }
 
     suspend fun write(uri: Uri, content: String) = withContext(Dispatchers.IO) {
@@ -54,7 +54,7 @@ class WorkspaceRepository(private val context: Context) {
             return@withContext
         }
         val stream = resolver.openOutputStream(uri, "wt")
-            ?: throw IOException("Unable to save document.")
+            ?: throw IOException(context.getString(R.string.save_document_failed))
         stream.bufferedWriter(Charsets.UTF_8).use { it.write(content) }
     }
 
@@ -80,10 +80,10 @@ class WorkspaceRepository(private val context: Context) {
             return@withContext Uri.fromFile(uniqueFile(managedRoot, requestedName).apply { writeText("") })
         }
         val root = DocumentFile.fromTreeUri(context, treeUri)
-            ?: throw IOException("The selected workspace is unavailable.")
+            ?: throw IOException(context.getString(R.string.workspace_unavailable))
         val name = uniqueName(root, requestedName)
         root.createFile("text/markdown", name)?.uri
-            ?: throw IOException("Unable to create the document.")
+            ?: throw IOException(context.getString(R.string.create_document_failed))
     }
 
     suspend fun renameManagedDocument(uri: Uri, requestedTitle: String): Uri = withContext(Dispatchers.IO) {
@@ -94,8 +94,19 @@ class WorkspaceRepository(private val context: Context) {
         val requested = markdownFileName(requestedTitle)
         if (source.name.equals(requested, ignoreCase = true)) return@withContext uri
         val target = uniqueFile(root, requested)
-        if (!source.renameTo(target)) throw IOException("Unable to name the document.")
+        if (!source.renameTo(target)) throw IOException(context.getString(R.string.rename_document_failed))
         Uri.fromFile(target)
+    }
+
+    suspend fun deleteDocument(uri: Uri) = withContext(Dispatchers.IO) {
+        val deleted = if (uri.scheme == "file") {
+            val file = File(requireNotNull(uri.path)).canonicalFile
+            val root = managedRoot.canonicalFile
+            file.isFile && file.parentFile == root && file.delete()
+        } else {
+            DocumentFile.fromSingleUri(context, uri)?.delete() == true
+        }
+        if (!deleted) throw IOException(context.getString(R.string.delete_document_failed))
     }
 
     suspend fun importAttachment(treeUri: Uri, sourceUri: Uri): String = withContext(Dispatchers.IO) {
@@ -105,24 +116,24 @@ class WorkspaceRepository(private val context: Context) {
             val safeName = originalName.replace(Regex("[^\\p{L}\\p{N}._-]"), "-").take(120)
             val target = uniqueFile(assets, safeName)
             resolver.openInputStream(sourceUri)?.use { input -> target.outputStream().use(input::copyTo) }
-                ?: throw IOException("Unable to read the selected attachment.")
+                ?: throw IOException(context.getString(R.string.read_attachment_failed))
             return@withContext "assets/${target.name}"
         }
         val root = DocumentFile.fromTreeUri(context, treeUri)
-            ?: throw IOException("The selected workspace is unavailable.")
+            ?: throw IOException(context.getString(R.string.workspace_unavailable))
         val assets = root.findFile("assets")?.takeIf(DocumentFile::isDirectory)
             ?: root.createDirectory("assets")
-            ?: throw IOException("Unable to create the assets folder.")
+            ?: throw IOException(context.getString(R.string.create_assets_folder_failed))
         val originalName = displayName(sourceUri) ?: "image-${System.currentTimeMillis()}.png"
         val safeName = originalName.replace(Regex("[^\\p{L}\\p{N}._-]"), "-").take(120)
         val name = uniqueName(assets, safeName)
         val mimeType = resolver.getType(sourceUri) ?: "application/octet-stream"
         val target = assets.createFile(mimeType, name)
-            ?: throw IOException("Unable to create the attachment.")
+            ?: throw IOException(context.getString(R.string.create_attachment_failed))
         resolver.openInputStream(sourceUri)?.use { input ->
             resolver.openOutputStream(target.uri, "w")?.use { output -> input.copyTo(output) }
-                ?: throw IOException("Unable to write the attachment.")
-        } ?: throw IOException("Unable to read the selected attachment.")
+                ?: throw IOException(context.getString(R.string.write_attachment_failed))
+        } ?: throw IOException(context.getString(R.string.read_attachment_failed))
         "assets/${target.name ?: name}"
     }
 

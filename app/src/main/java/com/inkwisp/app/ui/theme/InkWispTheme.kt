@@ -26,7 +26,7 @@ val DarkElevated = Color(0xFF211F1A)
 val DarkInk = Color(0xFFF0EADF)
 
 val WenKaiFamily = FontFamily(Font(R.font.lxgw_wenkai_lite_regular))
-val NewsreaderFamily = FontFamily(Font(R.font.newsreader_variable))
+val ManropeFamily = FontFamily(Font(R.font.manrope_variable))
 
 private val LightColors = lightColorScheme(
     primary = Vermilion,
@@ -146,7 +146,7 @@ fun InkWispTheme(
     val isChinese = LocalConfiguration.current.locales[0].language == "zh"
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = inkTypography(if (isChinese) WenKaiFamily else NewsreaderFamily),
+        typography = inkTypography(if (isChinese) WenKaiFamily else ManropeFamily),
         shapes = InkShapes,
         content = content,
     )

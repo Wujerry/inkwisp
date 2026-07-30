@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -12,6 +13,10 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -58,6 +63,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -69,6 +75,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -115,7 +122,9 @@ import com.inkwisp.app.model.EditorMode
 import com.inkwisp.app.model.EditorUiState
 import com.inkwisp.app.model.SaveState
 import com.inkwisp.app.model.PredictionState
+import com.inkwisp.app.model.WorkspaceFile
 import com.inkwisp.app.model.titleWithoutMarkdownExtension
+import com.inkwisp.app.model.applicationLocaleTags
 import com.inkwisp.app.ui.theme.InkWispTheme
 import com.inkwisp.app.ui.SettingsScreen
 import com.inkwisp.app.export.ExportFormat
@@ -199,9 +208,10 @@ class MainActivity : AppCompatActivity() {
     private fun languagePreferences() = getSharedPreferences("interface_language", MODE_PRIVATE)
 
     private fun applyPersistedLanguage() {
-        val tag = resolvedLanguageTag()
-        if (AppCompatDelegate.getApplicationLocales().toLanguageTags() != tag) {
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(tag))
+        val stored = languagePreferences().getString(LANGUAGE_KEY, null)
+        val locales = LocaleListCompat.forLanguageTags(applicationLocaleTags(stored))
+        if (AppCompatDelegate.getApplicationLocales() != locales) {
+            AppCompatDelegate.setApplicationLocales(locales)
         }
     }
 
@@ -212,20 +222,12 @@ class MainActivity : AppCompatActivity() {
             languagePreferences().edit().putString(LANGUAGE_KEY, tag).apply()
         }
         AppCompatDelegate.setApplicationLocales(
-            LocaleListCompat.forLanguageTags(resolvedLanguageTag()),
+            LocaleListCompat.forLanguageTags(applicationLocaleTags(tag)),
         )
     }
 
-    private fun resolvedLanguageTag(): String =
-        languagePreferences().getString(LANGUAGE_KEY, null) ?: systemLanguageTag()
-
     private fun languagePreferenceMode(): String =
         languagePreferences().getString(LANGUAGE_KEY, null) ?: SYSTEM_LANGUAGE
-
-    private fun systemLanguageTag(): String {
-        val language = android.content.res.Resources.getSystem().configuration.locales[0].language
-        return if (language.equals("zh", ignoreCase = true)) "zh-CN" else "en"
-    }
 
     private companion object {
         const val LANGUAGE_KEY = "language_tag"
@@ -256,6 +258,8 @@ private fun InkWispApp(
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
 
+    BackHandler(enabled = state.showSettings) { viewModel.showSettings(false) }
+
     LaunchedEffect(state.drawerOpen) {
         if (state.drawerOpen) drawerState.open() else drawerState.close()
     }
@@ -281,6 +285,7 @@ private fun InkWispApp(
                     onOpenDocument = onOpenDocument,
                     onNewDocument = onNewDocument,
                     onFileSelected = { viewModel.openDocument(it.uri, it.name) },
+                    onDeleteDocument = viewModel::deleteDocument,
                     onSearch = viewModel::setSearchQuery,
                     onSettings = { viewModel.showSettings(true) },
                     modifier = Modifier.width(300.dp).fillMaxHeight(),
@@ -312,7 +317,7 @@ private fun InkWispApp(
         } else {
             ModalNavigationDrawer(
                 drawerState = drawerState,
-                gesturesEnabled = true,
+                gesturesEnabled = drawerState.isOpen,
                 drawerContent = {
                     ModalDrawerSheet(
                         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -328,6 +333,7 @@ private fun InkWispApp(
                                 viewModel.openDocument(it.uri, it.name)
                                 scope.launch { drawerState.close() }
                             },
+                            onDeleteDocument = viewModel::deleteDocument,
                             onSearch = viewModel::setSearchQuery,
                             onSettings = { viewModel.showSettings(true) },
                             modifier = Modifier.fillMaxSize(),
@@ -377,21 +383,21 @@ private fun InkWispApp(
         state.editConflict?.let {
             AlertDialog(
                 onDismissRequest = {},
-                title = { Text("File changed outside InkWisp") },
+                title = { Text(stringResource(R.string.file_changed_title)) },
                 text = {
-                    Text("Your edits are safe. Choose which version to keep; InkWisp will not overwrite the external change silently.")
+                    Text(stringResource(R.string.file_changed_body))
                 },
                 confirmButton = {
-                    TextButton(onClick = viewModel::overwriteExternalConflict) { Text("Keep mine") }
+                    TextButton(onClick = viewModel::overwriteExternalConflict) { Text(stringResource(R.string.keep_mine)) }
                 },
                 dismissButton = {
                     Row {
-                        TextButton(onClick = viewModel::reloadExternalConflict) { Text("Reload external") }
+                        TextButton(onClick = viewModel::reloadExternalConflict) { Text(stringResource(R.string.reload_external)) }
                         TextButton(
                             onClick = {
                                 onSaveConflictCopy(state.activeDocument?.title ?: "document.md")
                             },
-                        ) { Text("Save a copy") }
+                        ) { Text(stringResource(R.string.save_copy)) }
                     }
                 },
             )
@@ -399,21 +405,21 @@ private fun InkWispApp(
         state.assistedEditProposal?.let { proposal ->
             AlertDialog(
                 onDismissRequest = viewModel::dismissAssistedEdit,
-                title = { Text("Review ${proposal.action}") },
+                title = { Text(stringResource(R.string.review_ai_edit)) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Original", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.original_text), style = MaterialTheme.typography.labelLarge)
                         Text(proposal.original, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         HorizontalDivider()
-                        Text("Proposed", style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.proposed_text), style = MaterialTheme.typography.labelLarge)
                         Text(proposal.replacement)
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = viewModel::applyAssistedEdit) { Text("Apply") }
+                    TextButton(onClick = viewModel::applyAssistedEdit) { Text(stringResource(R.string.apply)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = viewModel::dismissAssistedEdit) { Text("Cancel") }
+                    TextButton(onClick = viewModel::dismissAssistedEdit) { Text(stringResource(R.string.cancel)) }
                 },
             )
         }
@@ -547,6 +553,7 @@ private fun EditorSurface(
                 onModeChange = onModeChange,
                 onSelectConnection = onSelectConnection,
                 onModelSettings = onModelSettings,
+                reducedMotion = reducedMotion,
             )
         },
         bottomBar = {
@@ -610,6 +617,7 @@ private fun DocumentHeader(
     onModeChange: (EditorMode) -> Unit,
     onSelectConnection: (String) -> Unit,
     onModelSettings: () -> Unit,
+    reducedMotion: Boolean,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -650,6 +658,7 @@ private fun DocumentHeader(
                     state = state,
                     onSelect = onSelectConnection,
                     onSettings = onModelSettings,
+                    reducedMotion = reducedMotion,
                 )
                 HeaderModeToggle(mode = state.editorMode, onModeChange = onModeChange)
                 ExportMenu(onSave = onSave, onExport = onExport)
@@ -664,6 +673,7 @@ private fun PredictionConnectionChip(
     state: EditorUiState,
     onSelect: (String) -> Unit,
     onSettings: () -> Unit,
+    reducedMotion: Boolean,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val connection = state.selectedConnection
@@ -674,55 +684,70 @@ private fun PredictionConnectionChip(
         PredictionState.Ready -> stringResource(R.string.predict_available)
         PredictionState.Error -> stringResource(R.string.predict_paused)
     }
-    val emphasized = state.predictionState == PredictionState.Loading ||
+    val active = state.predictionState == PredictionState.Loading ||
         state.predictionState == PredictionState.Ready
+    val motion = rememberInfiniteTransition(label = "prediction-status")
+    val pulse by motion.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.075f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "prediction-ready-pulse",
+    )
+    val iconColor = when (state.predictionState) {
+        PredictionState.Disabled -> MaterialTheme.colorScheme.primary.copy(alpha = 0.56f)
+        PredictionState.Error -> MaterialTheme.colorScheme.error
+        PredictionState.Idle -> MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+        PredictionState.Loading, PredictionState.Ready -> MaterialTheme.colorScheme.primary
+    }
     Box {
-        Row(
+        Box(
             modifier = Modifier
-                .widthIn(max = 150.dp)
-                .clip(RoundedCornerShape(11.dp))
+                .size(42.dp)
+                .graphicsLayer {
+                    val scale = if (!reducedMotion && state.predictionState == PredictionState.Ready) pulse else 1f
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .clip(RoundedCornerShape(13.dp))
                 .background(
-                    if (emphasized) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.115f)
+                    else if (state.predictionState == PredictionState.Disabled)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.055f)
                     else MaterialTheme.colorScheme.surfaceContainerLow,
                 )
                 .clickable { expanded = true }
-                .padding(horizontal = 9.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(8.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                Modifier.size(7.dp).clip(CircleShape).background(
-                    when (state.predictionState) {
-                        PredictionState.Disabled, PredictionState.Error -> MaterialTheme.colorScheme.outline
-                        PredictionState.Loading, PredictionState.Ready -> MaterialTheme.colorScheme.primary
-                        PredictionState.Idle -> MaterialTheme.colorScheme.primary.copy(alpha = 0.68f)
-                    },
-                ),
-            )
-            Spacer(Modifier.width(7.dp))
-            Column(Modifier.weight(1f, fill = false)) {
-                Text(
-                    text = connection?.name ?: stringResource(R.string.inline_predict),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Text(
-                    text = status,
-                    maxLines = 1,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (emphasized) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            if (state.predictionState == PredictionState.Loading && !reducedMotion) {
+                CircularProgressIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    strokeWidth = 1.5.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f),
+                    trackColor = androidx.compose.ui.graphics.Color.Transparent,
                 )
             }
+            Icon(
+                Icons.Default.AutoAwesome,
+                contentDescription = listOfNotNull(connection?.name, status).joinToString(" · "),
+                tint = iconColor,
+                modifier = Modifier.size(19.dp),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(if (state.predictionState == PredictionState.Ready) 6.dp else 5.dp)
+                    .clip(CircleShape)
+                    .background(iconColor),
+            )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = {
-                    Text(
-                        stringResource(R.string.inline_predict),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    Column {
+                        Text(connection?.name ?: stringResource(R.string.inline_predict), style = MaterialTheme.typography.labelLarge)
+                        Text(status, style = MaterialTheme.typography.labelSmall, color = iconColor)
+                    }
                 },
                 enabled = false,
                 onClick = {},
@@ -760,7 +785,7 @@ private fun ExportMenu(onSave: () -> Unit, onExport: (ExportFormat) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Export")
+            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.export))
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
@@ -773,7 +798,7 @@ private fun ExportMenu(onSave: () -> Unit, onExport: (ExportFormat) -> Unit) {
             )
             ExportFormat.entries.forEach { format ->
                 DropdownMenuItem(
-                    text = { Text("Export ${format.name}") },
+                    text = { Text(stringResource(R.string.export_format, format.name)) },
                     onClick = {
                         expanded = false
                         onExport(format)
@@ -792,11 +817,13 @@ private fun WorkspacePanel(
     onOpenDocument: () -> Unit,
     onNewDocument: () -> Unit,
     onFileSelected: (com.inkwisp.app.model.WorkspaceFile) -> Unit,
+    onDeleteDocument: (WorkspaceFile) -> Unit,
     onSearch: (String) -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isManagedWorkspace = state.workspaceUri?.scheme == "inkwisp"
+    var pendingDelete by remember { mutableStateOf<WorkspaceFile?>(null) }
     Column(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -948,6 +975,7 @@ private fun WorkspacePanel(
                     depth = file.depth,
                     selected = state.activeDocument?.uri == file.uri,
                     onClick = { onFileSelected(file) },
+                    onDelete = { pendingDelete = file },
                 )
             }
             if (state.filteredFiles.isEmpty()) {
@@ -1013,6 +1041,25 @@ private fun WorkspacePanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+    pendingDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.delete_document)) },
+            text = { Text(stringResource(R.string.delete_document_confirmation, file.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDelete = null
+                        onDeleteDocument(file)
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 }
 
@@ -1135,7 +1182,9 @@ private fun WorkspaceFileRow(
     depth: Int,
     selected: Boolean,
     onClick: () -> Unit,
+    onDelete: () -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
     val color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)
     else androidx.compose.ui.graphics.Color.Transparent
     Row(
@@ -1166,7 +1215,27 @@ private fun WorkspaceFileRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
             )
+            Box {
+                IconButton(onClick = { expanded = true }, modifier = Modifier.size(34.dp)) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.more_files),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.delete_document)) },
+                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null) },
+                        onClick = {
+                            expanded = false
+                            onDelete()
+                        },
+                    )
+                }
+            }
         }
     }
 }

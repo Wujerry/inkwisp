@@ -33,4 +33,4 @@ All primary motion lasts roughly 160–240 ms, responds to interruption, and bec
 - Dark elevated: `#201E1B`
 - Dark ink: `#F1ECE2`
 
-Typography pairs the bundled Newsreader variable font for English with the bundled LXGW WenKai Lite Regular font for Chinese. Mixed Markdown prose falls back per glyph so Latin and Han scripts keep their intended voices. Interface hierarchy relies on type scale, optical spacing, dividers, and one vermilion signal rather than shadows or decorative containers.
+Typography uses bundled Manrope for the English interface, Literata for long-form Latin Markdown, and LXGW WenKai Lite for Chinese. Mixed Markdown prose falls back per glyph so Latin and Han scripts keep their intended voices. Interface hierarchy relies on type scale, optical spacing, dividers, and one vermilion signal rather than shadows or decorative containers.

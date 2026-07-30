@@ -15,7 +15,7 @@ import {
 } from "@codemirror/view";
 import { GFM } from "@lezer/markdown";
 import { formatSelection, type FormatCommand } from "./format";
-import { normalizedHeadingInsertion } from "./instant";
+import { closingInlineDelimiter, normalizedHeadingInsertion, smartBlockEnter } from "./instant";
 
 declare global {
   interface Window {
@@ -32,12 +32,14 @@ interface InkWispEditorApi {
   setDocument(content: string, revision: number): void;
   setMode(mode: "instant" | "source"): void;
   setAppearance(theme: "light" | "dark", reducedMotion: boolean): void;
+  setLocale(locale: "en" | "zh-CN"): void;
   runCommand(command: FormatCommand): void;
   setPrediction(text: string): void;
   acceptPrediction(amount?: "all" | "next"): void;
   requestAssistedEdit(action: string): void;
   insertText(text: string): void;
   focus(): void;
+  getDocument(): string;
 }
 
 const externalDocument = StateEffect.define<boolean>();
@@ -45,6 +47,7 @@ const setPredictionEffect = StateEffect.define<string>();
 const clearPredictionEffect = StateEffect.define<void>();
 const refreshInstantRenderEffect = StateEffect.define<void>();
 const modeCompartment = new Compartment();
+const localeCompartment = new Compartment();
 
 class PredictionWidget extends WidgetType {
   constructor(readonly text: string) {
@@ -246,6 +249,14 @@ const state = EditorState.create({
     markdown({ extensions: [GFM] }),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     keymap.of([
+      {
+        key: "Enter",
+        run: (view) => insertOutsideClosingDelimiter(view, "\n") || applySmartBlockEnter(view),
+      },
+      {
+        key: "ArrowRight",
+        run: (view) => moveOutsideClosingDelimiter(view),
+      },
       ...defaultKeymap,
       ...historyKeymap,
       indentWithTab,
@@ -260,13 +271,15 @@ const state = EditorState.create({
     ]),
     predictionField,
     modeCompartment.of([instantRender, EditorView.editorAttributes.of({ class: "iw-instant" })]),
-    placeholder("Begin writing…"),
+    localeCompartment.of([
+      placeholder("Begin writing…"),
+      EditorView.contentAttributes.of({
+        spellcheck: "true",
+        autocapitalize: "sentences",
+        "aria-label": "Markdown editor",
+      }),
+    ]),
     EditorView.lineWrapping,
-    EditorView.contentAttributes.of({
-      spellcheck: "true",
-      autocapitalize: "sentences",
-      "aria-label": "Markdown editor",
-    }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged || update.selectionSet) scheduleKeyboardSafeScroll(update.view);
       if (update.docChanged && !update.transactions.some(
@@ -282,6 +295,30 @@ const state = EditorState.create({
     }),
     EditorView.inputHandler.of((target, from, to, text) => {
       if (from !== to) return false;
+      const delimiter = closingInlineDelimiter(target.state.doc.toString(), from);
+      if (delimiter && (text === "\n" || /^\s/.test(text) || text === delimiter)) {
+        const insert = text === delimiter ? "" : text;
+        const at = from + delimiter.length;
+        target.dispatch({
+          changes: insert ? { from: at, insert } : undefined,
+          selection: EditorSelection.cursor(at + insert.length),
+          scrollIntoView: true,
+          userEvent: "input.type",
+        });
+        return true;
+      }
+      if (text === "\n") {
+        const edit = smartBlockEnter(target.state.doc.toString(), from);
+        if (edit) {
+          target.dispatch({
+            changes: { from: edit.from, to: edit.to, insert: edit.insert },
+            selection: EditorSelection.cursor(edit.cursor),
+            scrollIntoView: true,
+            userEvent: "input.type",
+          });
+          return true;
+        }
+      }
       const line = target.state.doc.lineAt(from);
       const insertion = normalizedHeadingInsertion(
         target.state.doc.sliceString(line.from, from),
@@ -297,6 +334,17 @@ const state = EditorState.create({
       return true;
     }),
     EditorView.domEventHandlers({
+      beforeinput(event, view) {
+        const text = event.data ?? "";
+        const lineBreak = event.inputType === "insertParagraph" ||
+          event.inputType === "insertLineBreak" || text === "\n";
+        const handled = lineBreak
+          ? insertOutsideClosingDelimiter(view, "\n") || applySmartBlockEnter(view)
+          : /^\s/.test(text) && insertOutsideClosingDelimiter(view, text);
+        if (!handled) return false;
+        event.preventDefault();
+        return true;
+      },
       pointerdown(event) {
         pointerStart = { x: event.clientX, y: event.clientY };
         return false;
@@ -361,6 +409,44 @@ function nextPredictionUnit(text: string): string {
   return match[0];
 }
 
+function moveOutsideClosingDelimiter(target: EditorView): boolean {
+  const selection = target.state.selection.main;
+  if (!selection.empty) return false;
+  const delimiter = closingInlineDelimiter(target.state.doc.toString(), selection.head);
+  if (!delimiter) return false;
+  target.dispatch({ selection: EditorSelection.cursor(selection.head + delimiter.length) });
+  return true;
+}
+
+function insertOutsideClosingDelimiter(target: EditorView, text: string): boolean {
+  const selection = target.state.selection.main;
+  if (!selection.empty) return false;
+  const delimiter = closingInlineDelimiter(target.state.doc.toString(), selection.head);
+  if (!delimiter) return false;
+  const at = selection.head + delimiter.length;
+  target.dispatch({
+    changes: { from: at, insert: text },
+    selection: EditorSelection.cursor(at + text.length),
+    scrollIntoView: true,
+    userEvent: "input.type",
+  });
+  return true;
+}
+
+function applySmartBlockEnter(target: EditorView): boolean {
+  const selection = target.state.selection.main;
+  if (!selection.empty) return false;
+  const edit = smartBlockEnter(target.state.doc.toString(), selection.head);
+  if (!edit) return false;
+  target.dispatch({
+    changes: { from: edit.from, to: edit.to, insert: edit.insert },
+    selection: EditorSelection.cursor(edit.cursor),
+    scrollIntoView: true,
+    userEvent: "input.type",
+  });
+  return true;
+}
+
 function runFormatCommand(command: FormatCommand): void {
   const selection = view.state.selection.main;
   const edit = formatSelection(view.state.doc.toString(), selection.from, selection.to, command);
@@ -398,6 +484,20 @@ window.InkWispEditor = {
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.reducedMotion = String(reducedMotion);
   },
+  setLocale(locale) {
+    const chinese = locale === "zh-CN";
+    document.documentElement.lang = locale;
+    view.dispatch({
+      effects: localeCompartment.reconfigure([
+        placeholder(chinese ? "开始写作…" : "Begin writing…"),
+        EditorView.contentAttributes.of({
+          spellcheck: "true",
+          autocapitalize: "sentences",
+          "aria-label": chinese ? "Markdown 编辑器" : "Markdown editor",
+        }),
+      ]),
+    });
+  },
   runCommand: runFormatCommand,
   setPrediction(text) {
     view.dispatch({ effects: setPredictionEffect.of(text) });
@@ -408,7 +508,7 @@ window.InkWispEditor = {
   requestAssistedEdit(action) {
     const selection = view.state.selection.main;
     if (view.state.doc.length === 0) {
-      window.InkWispNative?.command(JSON.stringify({ type: "error", message: "Write something first." }));
+      window.InkWispNative?.command(JSON.stringify({ type: "error", code: "emptyDocument" }));
       return;
     }
     const from = selection.empty ? 0 : selection.from;
@@ -433,6 +533,9 @@ window.InkWispEditor = {
   focus() {
     view.focus();
     keepCursorAboveKeyboard();
+  },
+  getDocument() {
+    return view.state.doc.toString();
   },
 };
 

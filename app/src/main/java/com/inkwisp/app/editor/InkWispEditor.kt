@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewAssetLoader
 import com.inkwisp.app.BuildConfig
@@ -73,6 +74,7 @@ fun InkWispEditor(
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     var ready by remember { mutableStateOf(false) }
+    val isChinese = LocalConfiguration.current.locales[0].language == "zh"
 
     AndroidView(
         modifier = modifier,
@@ -125,6 +127,14 @@ fun InkWispEditor(
     LaunchedEffect(ready, mode) {
         if (!ready) return@LaunchedEffect
         webView?.evaluateJavascript("window.InkWispEditor?.setMode('${mode.name.lowercase()}')", null)
+    }
+
+    LaunchedEffect(ready, isChinese) {
+        if (!ready) return@LaunchedEffect
+        webView?.evaluateJavascript(
+            "window.InkWispEditor?.setLocale('${if (isChinese) "zh-CN" else "en"}')",
+            null,
+        )
     }
 
     LaunchedEffect(ready, darkTheme, reducedMotion) {

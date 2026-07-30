@@ -22,6 +22,8 @@ import com.inkwisp.app.model.AssistedEditProposal
 import com.inkwisp.app.model.EditorInsertion
 import com.inkwisp.app.model.titleFromMarkdown
 import com.inkwisp.app.model.titleWithoutMarkdownExtension
+import com.inkwisp.app.model.WorkspaceFile
+import com.inkwisp.app.model.documentTitleMatchesFile
 import com.inkwisp.app.search.IndexDocument
 import com.inkwisp.app.search.WorkspaceIndex
 import com.inkwisp.app.search.findExplicitReferences
@@ -173,6 +175,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun deleteDocument(file: WorkspaceFile) {
+        val workspaceUri = _uiState.value.workspaceUri ?: return
+        val deletingActive = _uiState.value.activeDocument?.let { active ->
+            active.uri == file.uri ||
+                (workspaceUri == repository.managedWorkspaceUri &&
+                    documentTitleMatchesFile(active.title, file.name))
+        } == true
+        viewModelScope.launch {
+            runCatching {
+                repository.deleteDocument(file.uri)
+                safetyStore.clearRecovery(file.uri)
+                repository.listFiles(workspaceUri)
+            }.onSuccess { (name, files) ->
+                _uiState.update {
+                    it.copy(
+                        workspaceName = name,
+                        files = files,
+                        searchQuery = "",
+                        searchMatchedPaths = emptySet(),
+                    )
+                }
+                rebuildWorkspaceIndex(files)
+                if (deletingActive) {
+                    preferences.setDocument(null)
+                    files.firstOrNull()?.let { openDocument(it.uri, it.name) } ?: newDocument()
+                }
+            }.onFailure(::showError)
+        }
+    }
+
     fun onEditorChanged(content: String, editorRevision: Long, cursor: Int) {
         if (editorRevision <= lastEditorRevision) return
         lastEditorRevision = editorRevision
@@ -223,18 +255,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveConnection(draft: ConnectionDraft) {
         if (draft.name.isBlank() || draft.baseUrl.isBlank() || draft.modelId.isBlank()) {
-            _uiState.update { it.copy(connectionTestMessage = "Name, Base URL, and Model ID are required.") }
+            _uiState.update { it.copy(connectionTestMessage = appString(R.string.validation_connection_required)) }
             return
         }
         if (!draft.dataTransferAccepted) {
-            _uiState.update { it.copy(connectionTestMessage = "Confirm the AI data transfer disclosure before saving.") }
+            _uiState.update { it.copy(connectionTestMessage = appString(R.string.validation_transfer_required)) }
             return
         }
         runCatching { connectionStore.save(draft) }
             .onSuccess {
                 loadConnections()
                 _uiState.update { state ->
-                    state.copy(connectionTestMessage = "Connection saved.", predictionState = PredictionState.Idle)
+                    state.copy(connectionTestMessage = appString(R.string.connection_saved), predictionState = PredictionState.Idle)
                 }
             }
             .onFailure(::showError)
@@ -256,7 +288,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             draft.id?.let(connectionStore::credential).orEmpty()
         }
         if (draft.baseUrl.isBlank() || draft.modelId.isBlank() || (draft.requiresApiKey && probeKey.isBlank())) {
-            _uiState.update { it.copy(connectionTestMessage = "Base URL, Model ID, and the required API key are needed to test.") }
+            _uiState.update { it.copy(connectionTestMessage = appString(R.string.validation_test_required)) }
             return
         }
         viewModelScope.launch {
@@ -285,8 +317,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 it.copy(
                     connectionTestInProgress = false,
                     connectionTestMessage = result.fold(
-                        onSuccess = { "Connected successfully." },
-                        onFailure = { failure -> failure.message ?: "Connection failed." },
+                        onSuccess = { appString(R.string.connected_successfully) },
+                        onFailure = { failure ->
+                            listOfNotNull(appString(R.string.connection_failed), failure.message)
+                                .distinct().joinToString(" ")
+                        },
                     ),
                 )
             }
@@ -362,7 +397,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun importAttachment(uri: Uri) {
         val workspaceUri = _uiState.value.workspaceUri
         if (workspaceUri == null) {
-            _uiState.update { it.copy(errorMessage = "Open a workspace before importing attachments.") }
+            _uiState.update { it.copy(errorMessage = appString(R.string.workspace_required_for_attachment)) }
             return
         }
         viewModelScope.launch {
@@ -388,7 +423,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val document = _uiState.value.activeDocument ?: return
         viewModelScope.launch {
             runCatching { exporter.export(uri, document.title, document.content, format) }
-                .onSuccess { _uiState.update { it.copy(errorMessage = "Export created.") } }
+                .onSuccess { _uiState.update { it.copy(errorMessage = appString(R.string.export_created)) } }
                 .onFailure(::showError)
         }
     }
@@ -396,7 +431,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun handleEditorCommand(command: String) {
         val payload = runCatching { JSONObject(command) }.getOrNull() ?: return
         when (payload.optString("type")) {
-            "error" -> _uiState.update { it.copy(errorMessage = payload.optString("message")) }
+            "error" -> _uiState.update {
+                it.copy(
+                    errorMessage = when (payload.optString("code")) {
+                        "emptyDocument" -> appString(R.string.write_something_first)
+                        else -> payload.optString("message").ifBlank { appString(R.string.generic_error) }
+                    },
+                )
+            }
             "assistedEdit" -> requestAssistedEdit(
                 action = payload.optString("action"),
                 from = payload.optInt("from", -1),
@@ -412,7 +454,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (proposal.from !in 0..document.content.length || proposal.to !in proposal.from..document.content.length) return
         if (document.content.substring(proposal.from, proposal.to) != proposal.original) {
             _uiState.update {
-                it.copy(assistedEditProposal = null, errorMessage = "The selection changed. Run the action again.")
+                it.copy(assistedEditProposal = null, errorMessage = appString(R.string.selection_changed))
             }
             return
         }
@@ -435,12 +477,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val document = _uiState.value.activeDocument ?: return
         val connection = _uiState.value.selectedConnection
         if (connection == null) {
-            _uiState.update { it.copy(showSettings = true, errorMessage = "Add a model connection to use AI edits.") }
+            _uiState.update { it.copy(showSettings = true, errorMessage = appString(R.string.add_connection_for_ai)) }
             return
         }
         val credential = connectionStore.credential(connection.id).orEmpty()
         if (connection.requiresApiKey && credential.isBlank()) {
-            _uiState.update { it.copy(showSettings = true, errorMessage = "Enter an API key for the selected connection.") }
+            _uiState.update { it.copy(showSettings = true, errorMessage = appString(R.string.api_key_required_for_ai)) }
             return
         }
         if (
@@ -684,8 +726,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun showError(error: Throwable) {
-        _uiState.update { it.copy(errorMessage = error.message ?: "Something went wrong.") }
+        _uiState.update { it.copy(errorMessage = error.message ?: appString(R.string.generic_error)) }
     }
+
+    private fun appString(id: Int): String = getApplication<Application>().getString(id)
 
     private companion object {
         const val AUTO_SAVE_DELAY_MS = 650L

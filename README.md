@@ -13,7 +13,7 @@ InkWisp is an Android Markdown editor built around inline prediction: pause, see
 - visible inline-prediction status and provider switching in the editor, Android Keystore-protected credentials, connection probes, and review-before-apply Assisted Edits
 - Markdown, HTML, PDF, and plain-text export
 - phone-language default (Chinese locales use Simplified Chinese; all others use English) with explicit English/Chinese switching
-- adaptive phone/tablet layout, water-ink identity, bundled Newsreader + LXGW WenKai Lite typography, paper-and-ink light/dark theme, and reduced-motion behavior
+- adaptive phone/tablet layout, water-ink identity, bundled Manrope + Literata + LXGW WenKai Lite typography, paper-and-ink light/dark theme, and reduced-motion behavior
 
 InkWisp has no account system, proprietary backend, analytics, advertising SDK, or bundled model credentials.
 

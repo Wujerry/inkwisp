@@ -12,6 +12,12 @@ class DocumentTitleTest {
         assertEquals("Notes.v2", titleWithoutMarkdownExtension("Notes.v2.MARKDOWN"))
         assertEquals("README", titleWithoutMarkdownExtension("README"))
     }
+
+    @Test
+    fun managedDocumentIdentitySurvivesAutomaticRenameTiming() {
+        assertEquals(true, documentTitleMatchesFile("INKWISPTEST", "INKWISPTEST.md"))
+        assertEquals(false, documentTitleMatchesFile("Another note", "INKWISPTEST.md"))
+    }
     @Test
     fun firstMeaningfulHeadingBecomesTitle() {
         assertEquals("A quiet morning", titleFromMarkdown("\n# A quiet morning\n\nBody"))

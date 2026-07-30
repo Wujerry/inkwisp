@@ -12,3 +12,9 @@ fun titleFromMarkdown(content: String): String? = content.lineSequence()
 
 fun titleWithoutMarkdownExtension(fileName: String): String =
     fileName.replace(Regex("(?i)\\.(md|markdown)$"), "")
+
+fun documentTitleMatchesFile(title: String, fileName: String): Boolean =
+    titleWithoutMarkdownExtension(title).equals(
+        titleWithoutMarkdownExtension(fileName),
+        ignoreCase = true,
+    )
