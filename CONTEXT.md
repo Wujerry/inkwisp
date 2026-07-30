@@ -102,6 +102,14 @@ _Avoid_: Provider account, AI account, model preset
 InkWisp's translation between its AI-assistance requests and a model API protocol shared by one or more providers.
 _Avoid_: Provider integration, vendor plugin
 
+**Prediction Protocol**:
+The request and response contract used specifically for Inline Prediction, which may differ from the Model Connection protocol used for Assisted Edits while sharing the same provider credentials.
+_Avoid_: Model protocol, prompt format, provider mode
+
+**Prompt Format**:
+The model-specific encoding that places a prefix and suffix around a fill-in-the-middle hole when a Prediction Protocol expects one formatted prompt rather than native prefix and suffix fields.
+_Avoid_: System prompt, prediction protocol, chat template
+
 **Custom Connection**:
 A Model Connection whose endpoint, model identifier, and optional headers are supplied by the user rather than selected from a vendor-specific integration.
 _Avoid_: Custom model, unknown provider

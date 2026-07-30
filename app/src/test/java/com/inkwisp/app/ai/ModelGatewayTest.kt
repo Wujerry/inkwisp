@@ -2,6 +2,8 @@ package com.inkwisp.app.ai
 
 import com.inkwisp.app.model.ModelConnection
 import com.inkwisp.app.model.ModelProtocol
+import com.inkwisp.app.model.PredictionProtocol
+import com.inkwisp.app.model.PromptFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -15,6 +17,7 @@ import okio.Buffer
 class ModelGatewayTest {
     private val gateway = ModelGateway()
     private val input = CompletionInput("Continue only", "Before cursor")
+    private val predictionInput = PredictionInput("Continue only", "chat context", "before", "after")
 
     @Test
     fun openAiChatUsesBearerHeaderAndChatEndpoint() {
@@ -77,14 +80,67 @@ class ModelGatewayTest {
     }
 
     @Test
-    fun successfulProbeDoesNotFailWhenReasoningModelReturnsNoVisibleText() = runTest {
+    fun deepSeekFimUsesBetaCompletionWithNativePrefixAndSuffix() {
+        val request = gateway.createPredictionRequest(
+            connection(ModelProtocol.OpenAiChat).copy(
+                baseUrl = "https://api.deepseek.com/v1",
+                modelId = "deepseek-v4-flash",
+                predictionProtocol = PredictionProtocol.DeepSeekFim,
+            ),
+            "secret",
+            predictionInput,
+        )
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+        val body = buffer.readUtf8()
+
+        assertEquals("https://api.deepseek.com/beta/completions", request.url.toString())
+        assertTrue(body.contains("\"prompt\":\"before\""))
+        assertTrue(body.contains("\"suffix\":\"after\""))
+    }
+
+    @Test
+    fun mistralFimUsesNativeFimEndpointAndMessageResponse() {
+        val request = gateway.createPredictionRequest(
+            connection(ModelProtocol.OpenAiChat).copy(
+                baseUrl = "https://api.mistral.ai/v1",
+                modelId = "codestral-latest",
+                predictionProtocol = PredictionProtocol.MistralFim,
+            ),
+            "secret",
+            predictionInput,
+        )
+
+        assertEquals("https://api.mistral.ai/v1/fim/completions", request.url.toString())
+        assertEquals("inserted", gateway.parseFimResponse("""{"choices":[{"message":{"content":"inserted"}}]}"""))
+    }
+
+    @Test
+    fun formattedFimEncodesTheSelectedModelPromptAndParsesTextResponse() {
+        val request = gateway.createPredictionRequest(
+            connection(ModelProtocol.OpenAiChat).copy(
+                predictionProtocol = PredictionProtocol.OpenAiCompatibleFim,
+                promptFormat = PromptFormat.DeepSeekCoder,
+            ),
+            "secret",
+            predictionInput,
+        )
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+
+        assertTrue(buffer.readUtf8().contains("<｜fim▁begin｜>before<｜fim▁hole｜>after<｜fim▁end｜>"))
+        assertEquals("inserted", gateway.parseFimResponse("""{"choices":[{"text":"inserted"}]}"""))
+    }
+
+    @Test
+    fun successfulProbeRequiresVisibleModelText() = runTest {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder()
                 .request(chain.request())
                 .protocol(Protocol.HTTP_1_1)
                 .code(200)
                 .message("OK")
-                .body("""{"choices":[{"message":{"reasoning_content":"OK","content":""}}]}""".toResponseBody())
+                .body("""{"choices":[{"message":{"content":"OK"}}]}""".toResponseBody())
                 .build()
         }.build()
         val probeGateway = ModelGateway(client)

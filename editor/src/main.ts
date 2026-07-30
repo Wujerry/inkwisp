@@ -39,6 +39,7 @@ interface InkWispEditorApi {
   requestAssistedEdit(action: string): void;
   insertText(text: string): void;
   focus(): void;
+  blur(): void;
   getDocument(): string;
 }
 
@@ -533,6 +534,11 @@ window.InkWispEditor = {
   focus() {
     view.focus();
     keepCursorAboveKeyboard();
+  },
+  blur() {
+    view.contentDOM.blur();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    window.getSelection()?.removeAllRanges();
   },
   getDocument() {
     return view.state.doc.toString();

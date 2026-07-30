@@ -84,7 +84,8 @@ InkWisp is an Android Markdown editor whose defining interaction is user-configu
 
 - Users may create and switch among multiple Model Connections.
 - Supported protocol adapters initially cover OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Google Gemini, and configurable OpenAI-compatible endpoints.
-- Each connection may define its endpoint, credentials, model identifier, supported request settings, and optional headers.
+- Each connection may define its endpoint, credentials, model identifier, and supported request settings. Inline Prediction may independently override the protocol, endpoint, and model while sharing the connection credential.
+- Inline Prediction supports native DeepSeek FIM and Mistral FIM contracts, OpenAI-style completion endpoints, and formatted FIM for Code Llama, StarCoder, DeepSeek Coder, Qwen, Code Gemma, Codestral, and GLM families.
 - No default provider is required for the first release.
 - A Capability Probe validates authentication and optional protocol behavior using fixed content that never reads a document.
 - Where supported, InkWisp retrieves a model list; manual configuration remains available when discovery is unavailable or incorrect.
@@ -101,6 +102,8 @@ InkWisp is an Android Markdown editor whose defining interaction is user-configu
 - Once a connection is configured, prediction is enabled automatically by default and can be disabled globally or per Workspace.
 - Prediction begins after approximately 700 ms of input inactivity and is cancelled when the document or cursor state changes.
 - Provisional continuation appears as ghost text at the cursor and never enters the document until accepted.
+- Auto routing prefers a recognized native FIM contract, then a recognized formatted FIM model, and otherwise falls back to chat continuation. An explicit but incompatible configuration reports an actionable error instead of silently guessing.
+- Zeta-family next-edit formats are shown as unavailable for cursor FIM until InkWisp captures the edit history and editable-region context those formats require.
 - Swipe right or physical `Tab` accepts the whole prediction; a contextual control accepts the next word or Chinese phrase; continued typing, Back, or physical `Esc` dismisses it.
 - Prediction language is inferred from content near the cursor, independent of interface language, with Workspace and document overrides.
 - The app must remain fully editable while the network is unavailable, credentials are missing, a provider rate-limits requests, or a prediction fails.

@@ -13,6 +13,9 @@ import com.inkwisp.app.model.ModelConnection
 import com.inkwisp.app.model.PredictionState
 import com.inkwisp.app.ai.CompletionInput
 import com.inkwisp.app.ai.ModelGateway
+import com.inkwisp.app.ai.PredictionInput
+import com.inkwisp.app.ai.resolvePredictionProtocol
+import com.inkwisp.app.model.PredictionProtocol
 import com.inkwisp.app.storage.AppPreferences
 import com.inkwisp.app.storage.ModelConnectionStore
 import com.inkwisp.app.storage.WorkspaceRepository
@@ -302,6 +305,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 maxOutputTokens = 64,
                 temperature = 0.0,
                 requiresApiKey = draft.requiresApiKey,
+                predictionProtocol = draft.predictionProtocol,
+                predictionBaseUrl = draft.predictionBaseUrl.trim().trimEnd('/'),
+                predictionModelId = draft.predictionModelId.trim(),
+                promptFormat = draft.promptFormat,
+                predictionMaxOutputTokens = draft.predictionMaxOutputTokens,
             )
             val result = runCatching {
                 modelGateway.probe(
@@ -312,6 +320,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         prompt = "Connection test. Do not use or request document content.",
                     ),
                 )
+                if (resolvePredictionProtocol(temporary) != PredictionProtocol.ChatContinuation) {
+                    modelGateway.probePrediction(
+                        temporary,
+                        probeKey,
+                        PredictionInput(
+                            system = PREDICTION_SYSTEM_PROMPT,
+                            chatPrompt = "Complete the phrase with the missing words: The quick brown [cursor] over the lazy dog.",
+                            prefix = "The quick brown ",
+                            suffix = " over the lazy dog.",
+                        ),
+                    )
+                }
             }
             _uiState.update {
                 it.copy(
@@ -570,18 +590,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 "<file path=\"${passage.path}\">\n${passage.text}\n</file>"
             }
             val result = runCatching {
-                modelGateway.complete(
+                modelGateway.predict(
                     connection,
                     credential,
-                    CompletionInput(
+                    PredictionInput(
                         system = PREDICTION_SYSTEM_PROMPT,
-                        prompt = buildString {
+                        chatPrompt = buildString {
                             append("<before>\n$before\n</before>\n")
                             append("<after>\n$after\n</after>")
                             if (workspaceContext.isNotBlank()) {
                                 append("\n<workspace_context>\n$workspaceContext\n</workspace_context>")
                             }
                         },
+                        prefix = before,
+                        suffix = after,
                     ),
                 )
             }

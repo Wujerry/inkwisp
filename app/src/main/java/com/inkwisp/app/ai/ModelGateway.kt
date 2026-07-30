@@ -2,6 +2,7 @@ package com.inkwisp.app.ai
 
 import com.inkwisp.app.model.ModelConnection
 import com.inkwisp.app.model.ModelProtocol
+import com.inkwisp.app.model.PredictionProtocol
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -29,6 +30,13 @@ data class CompletionInput(
     val prompt: String,
 )
 
+data class PredictionInput(
+    val system: String,
+    val chatPrompt: String,
+    val prefix: String,
+    val suffix: String,
+)
+
 class ModelGateway(
     private val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -54,7 +62,47 @@ class ModelGateway(
         apiKey: String,
         input: CompletionInput,
     ) = withContext(Dispatchers.IO) {
-        execute(createRequest(connection, apiKey, input))
+        val request = createRequest(connection, apiKey, input)
+        val text = parseResponse(connection.protocol, execute(request)).trim()
+        if (text.isEmpty()) {
+            throw ModelRequestException("The model returned no test text from ${request.url.host}.")
+        }
+        Unit
+    }
+
+    suspend fun predict(
+        connection: ModelConnection,
+        apiKey: String,
+        input: PredictionInput,
+    ): String = withContext(Dispatchers.IO) {
+        val protocol = resolvePredictionProtocol(connection)
+        val request = createPredictionRequest(connection, apiKey, input)
+        val body = execute(request)
+        val text = if (protocol == PredictionProtocol.ChatContinuation) {
+            parseResponse(connection.protocol, body)
+        } else {
+            parseFimResponse(body)
+        }
+        cleanFimCompletion(text).trim()
+            .ifEmpty { throw ModelRequestException("The model returned no prediction text from ${request.url.host}.") }
+    }
+
+    suspend fun probePrediction(
+        connection: ModelConnection,
+        apiKey: String,
+        input: PredictionInput,
+    ) = withContext(Dispatchers.IO) {
+        val protocol = resolvePredictionProtocol(connection)
+        val request = createPredictionRequest(connection, apiKey, input)
+        val body = execute(request)
+        val text = if (protocol == PredictionProtocol.ChatContinuation) {
+            parseResponse(connection.protocol, body)
+        } else {
+            parseFimResponse(body)
+        }
+        if (cleanFimCompletion(text).trim().isEmpty()) {
+            throw ModelRequestException("The prediction endpoint returned no test text from ${request.url.host}.")
+        }
         Unit
     }
 
@@ -114,6 +162,34 @@ class ModelGateway(
             .build()
     }
 
+    internal fun createPredictionRequest(
+        connection: ModelConnection,
+        apiKey: String,
+        input: PredictionInput,
+    ): Request {
+        val protocol = resolvePredictionProtocol(connection)
+        if (protocol == PredictionProtocol.ChatContinuation) {
+            return createRequest(
+                connection,
+                apiKey,
+                CompletionInput(input.system, input.chatPrompt),
+            )
+        }
+        val base = predictionBase(connection, protocol)
+        val path = if (protocol == PredictionProtocol.MistralFim) "fim/completions" else "completions"
+        val formatted = protocol == PredictionProtocol.OpenAiCompatibleFim
+        val body = fimBody(connection, input, formatted)
+        return Request.Builder()
+            .url(endpoint(base, path))
+            .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            .header("Accept", "application/json")
+            .apply {
+                if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
+                connection.headers.forEach { (name, value) -> header(name, value) }
+            }
+            .build()
+    }
+
     internal fun parseResponse(protocol: ModelProtocol, body: String): String {
         val root = json.parseToJsonElement(body).jsonObject
         return when (protocol) {
@@ -132,6 +208,14 @@ class ModelGateway(
                 ?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.contentOrNull }
                 ?.joinToString("")
         }.orEmpty()
+    }
+
+    internal fun parseFimResponse(body: String): String {
+        val root = json.parseToJsonElement(body).jsonObject
+        val first = root["choices"]?.jsonArray?.firstOrNull()?.jsonObject ?: return ""
+        return first["text"]?.jsonPrimitive?.contentOrNull
+            ?: first["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull
+            ?: ""
     }
 
     private fun openAiChatBody(connection: ModelConnection, input: CompletionInput): JsonObject = buildJsonObject {
@@ -182,6 +266,25 @@ class ModelGateway(
         })
     }
 
+    private fun fimBody(
+        connection: ModelConnection,
+        input: PredictionInput,
+        formatted: Boolean,
+    ): JsonObject = buildJsonObject {
+        put("model", JsonPrimitive(predictionModel(connection)))
+        val prompt = if (formatted) {
+            formatFimPrompt(resolvePromptFormat(connection), input.prefix, input.suffix)
+        } else input.prefix
+        put("prompt", JsonPrimitive(prompt))
+        if (!formatted && input.suffix.isNotEmpty()) put("suffix", JsonPrimitive(input.suffix))
+        put("temperature", JsonPrimitive(connection.temperature.coerceIn(0.0, 1.0)))
+        put("max_tokens", JsonPrimitive(connection.predictionMaxOutputTokens.coerceIn(16, 4096)))
+        if (formatted) {
+            put("stop", buildJsonArray { STANDARD_FIM_STOP_TOKENS.forEach { add(JsonPrimitive(it)) } })
+        }
+        put("stream", JsonPrimitive(false))
+    }
+
     private fun message(role: String, content: String): JsonObject = buildJsonObject {
         put("role", JsonPrimitive(role))
         put("content", JsonPrimitive(content))
@@ -199,6 +302,22 @@ class ModelGateway(
             normalized.endsWith("/v1") -> "$normalized/messages"
             else -> "$normalized/v1/messages"
         }
+    }
+
+    private fun predictionBase(connection: ModelConnection, protocol: PredictionProtocol): String {
+        if (connection.predictionBaseUrl.isNotBlank()) return connection.predictionBaseUrl
+        return if (protocol == PredictionProtocol.DeepSeekFim) {
+            connection.baseUrl.trimEnd('/').replace(Regex("/(?:v1|anthropic)$", RegexOption.IGNORE_CASE), "") + "/beta"
+        } else connection.baseUrl
+    }
+
+    private fun cleanFimCompletion(value: String): String {
+        var result = value
+        STANDARD_FIM_STOP_TOKENS.forEach { token ->
+            val index = result.indexOf(token)
+            if (index >= 0) result = result.substring(0, index)
+        }
+        return result
     }
 
     private fun extractError(body: String): String = runCatching {

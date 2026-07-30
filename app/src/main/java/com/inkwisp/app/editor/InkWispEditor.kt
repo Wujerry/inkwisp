@@ -6,6 +6,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.inputmethod.InputMethodManager
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +42,14 @@ class EditorController {
 
     fun focus() {
         webView?.evaluateJavascript("window.InkWispEditor?.focus()", null)
+    }
+
+    fun dismissInput() {
+        val view = webView ?: return
+        view.evaluateJavascript("window.InkWispEditor?.blur()", null)
+        view.clearFocus()
+        (view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     fun requestAssistedEdit(action: String) {

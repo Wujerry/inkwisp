@@ -63,6 +63,8 @@ import com.inkwisp.app.model.ModelConnection
 import com.inkwisp.app.model.ModelProtocol
 import com.inkwisp.app.model.ProviderCatalog
 import com.inkwisp.app.model.ProviderCategory
+import com.inkwisp.app.model.PredictionProtocol
+import com.inkwisp.app.model.PromptFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +82,8 @@ fun SettingsScreen(
     var draft by remember { mutableStateOf(ConnectionDraft(baseUrl = defaultBaseUrl(ModelProtocol.OpenAiChat))) }
     var providerExpanded by remember { mutableStateOf(false) }
     var protocolExpanded by remember { mutableStateOf(false) }
+    var predictionProtocolExpanded by remember { mutableStateOf(false) }
+    var promptFormatExpanded by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
     val isChinese = LocalConfiguration.current.locales[0].language == "zh"
     val tr: (String, String) -> String = { english, chinese -> if (isChinese) chinese else english }
@@ -254,6 +258,10 @@ fun SettingsScreen(
                                         baseUrl = preset.baseUrl,
                                         modelId = preset.exampleModel,
                                         requiresApiKey = preset.requiresApiKey,
+                                        predictionProtocol = preset.predictionProtocol,
+                                        predictionBaseUrl = preset.predictionBaseUrl,
+                                        predictionModelId = preset.predictionModelId,
+                                        promptFormat = preset.promptFormat,
                                     )
                                     if (preset.category == ProviderCategory.Custom) showAdvanced = true
                                     providerExpanded = false
@@ -264,6 +272,29 @@ fun SettingsScreen(
                 }
             }
             item {
+                OutlinedTextField(
+                    value = draft.modelId,
+                    onValueChange = { draft = draft.copy(modelId = it) },
+                    label = { Text("Model ID") },
+                    placeholder = { Text(tr("Provider model identifier", "服务商模型标识")) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item {
+                OutlinedTextField(
+                    value = draft.apiKey,
+                    onValueChange = { draft = draft.copy(apiKey = it) },
+                    label = { Text(if (draft.id == null) "API Key" else tr("API key (blank keeps current)", "API Key（留空则保留原值）")) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    enabled = draft.requiresApiKey,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            item {
                 TextButton(onClick = { showAdvanced = !showAdvanced }) {
                     Text(
                         if (showAdvanced) tr("Hide advanced settings", "收起高级设置")
@@ -272,6 +303,18 @@ fun SettingsScreen(
                 }
             }
             if (showAdvanced) {
+            item {
+                Text(tr("Connection protocol", "连接协议"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    tr(
+                        "These settings control assisted edits and general model requests.",
+                        "这些设置用于 AI 改写及通用模型请求。",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable {
@@ -346,29 +389,126 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            item {
+                Spacer(Modifier.height(4.dp))
+                Text(tr("Inline prediction", "行内预测"), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    tr(
+                        "Choose how this connection predicts text at the cursor. Auto prefers a native FIM API when it can identify one, then falls back to chat continuation.",
+                        "选择当前连接在光标处续写的方式。自动模式会优先使用可识别的原生 FIM API，否则回退到对话续写。",
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
             item {
+                ExposedDropdownMenuBox(
+                    expanded = predictionProtocolExpanded,
+                    onExpandedChange = { predictionProtocolExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = predictionProtocolLabel(draft.predictionProtocol, isChinese),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(tr("Prediction protocol", "预测协议")) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(predictionProtocolExpanded) },
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = predictionProtocolExpanded,
+                        onDismissRequest = { predictionProtocolExpanded = false },
+                    ) {
+                        PredictionProtocol.entries.forEach { protocol ->
+                            DropdownMenuItem(
+                                text = { Text(predictionProtocolLabel(protocol, isChinese)) },
+                                onClick = {
+                                    draft = draft.copy(predictionProtocol = protocol)
+                                    predictionProtocolExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            if (draft.predictionProtocol != PredictionProtocol.ChatContinuation) {
+            item {
                 OutlinedTextField(
-                    value = draft.modelId,
-                    onValueChange = { draft = draft.copy(modelId = it) },
-                    label = { Text("Model ID") },
-                    placeholder = { Text(tr("Provider model identifier", "服务商模型标识")) },
+                    value = draft.predictionBaseUrl,
+                    onValueChange = { draft = draft.copy(predictionBaseUrl = it) },
+                    label = { Text(tr("Prediction Base URL (optional)", "预测 Base URL（可选）")) },
+                    supportingText = { Text(tr("Leave blank to derive it from the main Base URL.", "留空则根据主 Base URL 自动推导。")) },
                     singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             item {
                 OutlinedTextField(
-                    value = draft.apiKey,
-                    onValueChange = { draft = draft.copy(apiKey = it) },
-                    label = { Text(if (draft.id == null) "API Key" else tr("API key (blank keeps current)", "API Key（留空则保留原值）")) },
-                    visualTransformation = PasswordVisualTransformation(),
+                    value = draft.predictionModelId,
+                    onValueChange = { draft = draft.copy(predictionModelId = it) },
+                    label = { Text(tr("Prediction model ID (optional)", "预测模型 ID（可选）")) },
+                    supportingText = { Text(tr("Leave blank to use the main model ID.", "留空则使用主模型 ID。")) },
                     singleLine = true,
-                    enabled = draft.requiresApiKey,
-                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            item {
+                OutlinedTextField(
+                    value = draft.predictionMaxOutputTokens.toString(),
+                    onValueChange = { value ->
+                        value.filter(Char::isDigit).toIntOrNull()?.let {
+                            draft = draft.copy(predictionMaxOutputTokens = it.coerceIn(16, 4096))
+                        }
+                    },
+                    label = { Text(tr("Prediction max tokens", "预测最大 Token 数")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            }
+            if (draft.predictionProtocol == PredictionProtocol.OpenAiCompatibleFim ||
+                draft.predictionProtocol == PredictionProtocol.Auto) {
+            item {
+                ExposedDropdownMenuBox(
+                    expanded = promptFormatExpanded,
+                    onExpandedChange = { promptFormatExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = promptFormatLabel(draft.promptFormat),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(tr("Prompt format", "Prompt 格式")) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(promptFormatExpanded) },
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = promptFormatExpanded,
+                        onDismissRequest = { promptFormatExpanded = false },
+                    ) {
+                        PromptFormat.entries.forEach { format ->
+                            val zeta = format in setOf(PromptFormat.Zeta, PromptFormat.Zeta2, PromptFormat.Zeta2_1)
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(promptFormatLabel(format))
+                                        if (zeta) Text(
+                                            tr("Requires next-edit context; not cursor FIM", "需要下一编辑上下文，不适用于光标 FIM"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                enabled = !zeta,
+                                onClick = {
+                                    draft = draft.copy(promptFormat = format)
+                                    promptFormatExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            }
             }
             state.connectionTestMessage?.let { message ->
                 item {
@@ -376,7 +516,8 @@ fun SettingsScreen(
                         message,
                         color = if (
                             message.contains("success", ignoreCase = true) ||
-                            message.contains("saved", ignoreCase = true)
+                            message.contains("saved", ignoreCase = true) ||
+                            message.contains("成功") || message.contains("保存")
                         ) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -402,8 +543,8 @@ fun SettingsScreen(
                 Text(tr("AI data transfer", "AI 数据传输"), style = MaterialTheme.typography.titleSmall)
                 Text(
                     tr(
-                        "When you run an AI edit, InkWisp sends the complete active document and up to four locally retrieved workspace passages directly to the model service you configured so it can preserve context and voice. Inline prediction sends a limited cursor excerpt. InkWisp does not receive this content. The provider's privacy and retention terms apply.",
-                        "运行 AI 编辑时，为了保留上下文和写作语气，续墨会把当前完整文档及最多四段本地检索到的工作区内容直接发送到你配置的模型服务；行内预测只发送光标附近片段。续墨不会接收这些内容，数据处理受该服务商的隐私与保留政策约束。",
+                        "When you run an AI edit, InkWisp sends the complete active document and up to four locally retrieved workspace passages directly to the configured service. Inline prediction sends a limited prefix and suffix around the cursor; chat fallback may also include retrieved passages. InkWisp does not receive this content. The provider's privacy and retention terms apply.",
+                        "运行 AI 编辑时，续墨会把当前完整文档及最多四段本地检索内容直接发送到所配置服务；行内预测发送光标附近有限的前缀与后缀，回退到对话续写时还可能包含检索片段。续墨不会接收这些内容，数据处理受服务商政策约束。",
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -547,8 +688,37 @@ private fun ModelConnection.toDraft() = ConnectionDraft(
     baseUrl = baseUrl,
     modelId = modelId,
     requiresApiKey = requiresApiKey,
+    predictionProtocol = predictionProtocol,
+    predictionBaseUrl = predictionBaseUrl,
+    predictionModelId = predictionModelId,
+    promptFormat = promptFormat,
+    predictionMaxOutputTokens = predictionMaxOutputTokens,
     dataTransferAccepted = false,
 )
+
+private fun predictionProtocolLabel(protocol: PredictionProtocol, isChinese: Boolean): String = when (protocol) {
+    PredictionProtocol.Auto -> if (isChinese) "自动（推荐）" else "Auto (recommended)"
+    PredictionProtocol.ChatContinuation -> if (isChinese) "对话续写" else "Chat continuation"
+    PredictionProtocol.OpenAiFim -> "OpenAI FIM · prompt + suffix"
+    PredictionProtocol.DeepSeekFim -> "DeepSeek FIM · /beta/completions"
+    PredictionProtocol.MistralFim -> "Mistral FIM · /fim/completions"
+    PredictionProtocol.OpenAiCompatibleFim -> if (isChinese) "OpenAI 兼容 · 格式化 FIM" else "OpenAI-compatible · formatted FIM"
+}
+
+private fun promptFormatLabel(format: PromptFormat): String = when (format) {
+    PromptFormat.Infer -> "Infer"
+    PromptFormat.Plain -> "Plain"
+    PromptFormat.Zeta -> "Zeta"
+    PromptFormat.Zeta2 -> "Zeta 2"
+    PromptFormat.Zeta2_1 -> "Zeta 2.1"
+    PromptFormat.CodeLlama -> "Code Llama"
+    PromptFormat.StarCoder -> "StarCoder"
+    PromptFormat.DeepSeekCoder -> "DeepSeek Coder"
+    PromptFormat.Qwen -> "Qwen"
+    PromptFormat.CodeGemma -> "CodeGemma"
+    PromptFormat.Codestral -> "Codestral"
+    PromptFormat.Glm -> "GLM"
+}
 
 private fun protocolLabel(protocol: ModelProtocol, isChinese: Boolean): String = when (protocol) {
     ModelProtocol.OpenAiChat -> if (isChinese) "OpenAI 对话补全" else "OpenAI Chat Completions"

@@ -8,6 +8,10 @@ data class ProviderPreset(
     val baseUrl: String,
     val exampleModel: String,
     val requiresApiKey: Boolean = true,
+    val predictionProtocol: PredictionProtocol = PredictionProtocol.Auto,
+    val predictionBaseUrl: String = "",
+    val predictionModelId: String = "",
+    val promptFormat: PromptFormat = PromptFormat.Infer,
 )
 
 enum class ProviderCategory { Official, Aggregator, China, Local, Custom }
@@ -21,10 +25,20 @@ object ProviderCatalog {
         preset("openai", "OpenAI", ProviderCategory.Official, ModelProtocol.OpenAiResponses, "https://api.openai.com/v1", "gpt-4.1-mini"),
         preset("anthropic", "Anthropic", ProviderCategory.Official, ModelProtocol.AnthropicMessages, "https://api.anthropic.com/v1", "claude-sonnet-4-5"),
         preset("google", "Google Gemini", ProviderCategory.Official, ModelProtocol.GoogleGemini, "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash"),
-        preset("deepseek", "DeepSeek", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.deepseek.com/v1", "deepseek-v4-flash"),
+        preset(
+            "deepseek", "DeepSeek", ProviderCategory.Official, ModelProtocol.OpenAiChat,
+            "https://api.deepseek.com/v1", "deepseek-v4-flash",
+            predictionProtocol = PredictionProtocol.DeepSeekFim,
+            predictionBaseUrl = "https://api.deepseek.com/beta",
+        ),
         preset("deepseek-anthropic", "DeepSeek · Anthropic API", ProviderCategory.Official, ModelProtocol.AnthropicMessages, "https://api.deepseek.com/anthropic", "deepseek-v4-flash"),
         preset("xai", "xAI", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.x.ai/v1", "grok-4"),
         preset("mistral", "Mistral AI", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.mistral.ai/v1", "mistral-small-latest"),
+        preset(
+            "codestral", "Mistral · Codestral FIM", ProviderCategory.Official, ModelProtocol.OpenAiChat,
+            "https://api.mistral.ai/v1", "codestral-latest",
+            predictionProtocol = PredictionProtocol.MistralFim,
+        ),
         preset("cohere", "Cohere", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.cohere.ai/compatibility/v1", "command-r-plus"),
         preset("perplexity", "Perplexity", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.perplexity.ai", "sonar"),
         preset("groq", "Groq", ProviderCategory.Official, ModelProtocol.OpenAiChat, "https://api.groq.com/openai/v1", "openai/gpt-oss-120b"),
@@ -59,6 +73,16 @@ object ProviderCatalog {
         preset("custom-responses", "Custom · OpenAI Responses", ProviderCategory.Custom, ModelProtocol.OpenAiResponses, "", "model-id"),
         preset("custom-anthropic", "Custom · Anthropic compatible", ProviderCategory.Custom, ModelProtocol.AnthropicMessages, "", "model-id"),
         preset("custom-gemini", "Custom · Gemini compatible", ProviderCategory.Custom, ModelProtocol.GoogleGemini, "", "model-id"),
+        preset(
+            "custom-fim-native", "Custom · OpenAI FIM", ProviderCategory.Custom,
+            ModelProtocol.OpenAiChat, "", "model-id",
+            predictionProtocol = PredictionProtocol.OpenAiFim,
+        ),
+        preset(
+            "custom-fim-formatted", "Custom · Formatted FIM", ProviderCategory.Custom,
+            ModelProtocol.OpenAiChat, "", "model-id",
+            predictionProtocol = PredictionProtocol.OpenAiCompatibleFim,
+        ),
     )
 
     private fun preset(
@@ -69,5 +93,12 @@ object ProviderCatalog {
         baseUrl: String,
         exampleModel: String,
         requiresApiKey: Boolean = true,
-    ) = ProviderPreset(id, name, category, protocol, baseUrl, exampleModel, requiresApiKey)
+        predictionProtocol: PredictionProtocol = PredictionProtocol.Auto,
+        predictionBaseUrl: String = "",
+        predictionModelId: String = "",
+        promptFormat: PromptFormat = PromptFormat.Infer,
+    ) = ProviderPreset(
+        id, name, category, protocol, baseUrl, exampleModel, requiresApiKey,
+        predictionProtocol, predictionBaseUrl, predictionModelId, promptFormat,
+    )
 }

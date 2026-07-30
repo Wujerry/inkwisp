@@ -35,6 +35,11 @@ class ModelConnectionStore(context: Context) {
             baseUrl = draft.baseUrl.trim().trimEnd('/'),
             modelId = draft.modelId.trim(),
             requiresApiKey = draft.requiresApiKey,
+            predictionProtocol = draft.predictionProtocol,
+            predictionBaseUrl = draft.predictionBaseUrl.trim().trimEnd('/'),
+            predictionModelId = draft.predictionModelId.trim(),
+            promptFormat = draft.promptFormat,
+            predictionMaxOutputTokens = draft.predictionMaxOutputTokens.coerceIn(16, 4096),
         )
         val index = all.indexOfFirst { it.id == id }
         if (index >= 0) all[index] = connection else all += connection

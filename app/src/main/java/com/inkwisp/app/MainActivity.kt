@@ -23,6 +23,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -109,6 +110,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -547,12 +553,18 @@ private fun EditorSurface(
             DocumentHeader(
                 state = state,
                 showMenu = showMenu,
-                onMenu = onMenu,
+                onMenu = {
+                    editorController.dismissInput()
+                    onMenu()
+                },
                 onSave = onSave,
                 onExport = onExport,
                 onModeChange = onModeChange,
                 onSelectConnection = onSelectConnection,
-                onModelSettings = onModelSettings,
+                onModelSettings = {
+                    editorController.dismissInput()
+                    onModelSettings()
+                },
                 reducedMotion = reducedMotion,
             )
         },
@@ -727,18 +739,10 @@ private fun PredictionConnectionChip(
                     trackColor = androidx.compose.ui.graphics.Color.Transparent,
                 )
             }
-            Icon(
-                Icons.Default.AutoAwesome,
-                contentDescription = listOfNotNull(connection?.name, status).joinToString(" · "),
-                tint = iconColor,
-                modifier = Modifier.size(19.dp),
-            )
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(if (state.predictionState == PredictionState.Ready) 6.dp else 5.dp)
-                    .clip(CircleShape)
-                    .background(iconColor),
+            InlinePredictionGlyph(
+                color = iconColor,
+                phase = if (state.predictionState == PredictionState.Loading && !reducedMotion) pulse else 1f,
+                description = listOfNotNull(connection?.name, status).joinToString(" · "),
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -775,6 +779,41 @@ private fun PredictionConnectionChip(
                     expanded = false
                     onSettings()
                 },
+            )
+        }
+    }
+}
+
+@Composable
+private fun InlinePredictionGlyph(
+    color: Color,
+    phase: Float,
+    description: String,
+) {
+    Canvas(
+        Modifier
+            .size(22.dp)
+            .semantics { contentDescription = description },
+    ) {
+        val scale = size.minDimension / 22f
+        drawLine(
+            color = color,
+            start = Offset(6.4f * scale, 4.2f * scale),
+            end = Offset(6.4f * scale, 17.8f * scale),
+            strokeWidth = 2.15f * scale,
+            cap = StrokeCap.Round,
+        )
+        val dots = listOf(
+            Triple(11.7f, 1.55f, 0.92f),
+            Triple(15.8f, 1.22f, 0.68f),
+            Triple(19.1f, 0.92f, 0.44f),
+        )
+        dots.forEachIndexed { index, (x, radius, alpha) ->
+            val animatedAlpha = (alpha * (0.72f + 0.28f * phase) - index * 0.035f).coerceIn(0.18f, 1f)
+            drawCircle(
+                color = color.copy(alpha = color.alpha * animatedAlpha),
+                radius = radius * scale,
+                center = Offset(x * scale, 11f * scale),
             )
         }
     }
