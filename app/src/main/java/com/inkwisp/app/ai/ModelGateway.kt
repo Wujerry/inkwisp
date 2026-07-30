@@ -44,16 +44,30 @@ class ModelGateway(
         input: CompletionInput,
     ): String = withContext(Dispatchers.IO) {
         val request = createRequest(connection, apiKey, input)
+        val body = execute(request)
+        parseResponse(connection.protocol, body).trim()
+            .ifEmpty { throw ModelRequestException("The model returned no writing text from ${request.url.host}.") }
+    }
+
+    suspend fun probe(
+        connection: ModelConnection,
+        apiKey: String,
+        input: CompletionInput,
+    ) = withContext(Dispatchers.IO) {
+        execute(createRequest(connection, apiKey, input))
+        Unit
+    }
+
+    private fun execute(request: Request): String {
         try {
-            client.newCall(request).execute().use { response ->
+            return client.newCall(request).execute().use { response ->
                 val body = response.body.string()
                 if (!response.isSuccessful) {
                     throw ModelRequestException(
                         "HTTP ${response.code} at ${request.url.host}${request.url.encodedPath}: ${extractError(body)}",
                     )
                 }
-                parseResponse(connection.protocol, body).trim()
-                    .ifEmpty { throw ModelRequestException("The model returned an empty response from ${request.url.host}.") }
+                body
             }
         } catch (failure: IOException) {
             if (failure is ModelRequestException) throw failure
@@ -128,6 +142,9 @@ class ModelGateway(
         })
         put("temperature", JsonPrimitive(connection.temperature))
         put("max_tokens", JsonPrimitive(connection.maxOutputTokens))
+        if (connection.modelId.startsWith("deepseek-v4", ignoreCase = true)) {
+            put("thinking", buildJsonObject { put("type", JsonPrimitive("disabled")) })
+        }
         put("stream", JsonPrimitive(false))
     }
 

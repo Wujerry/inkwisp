@@ -57,16 +57,24 @@ A Workspace reference from another document to the active document, derived from
 _Avoid_: Incoming URL, related document, citation
 
 **Workspace**:
-A user-authorized filesystem folder whose Markdown documents InkWisp edits in place without importing copies into an app-owned library.
-_Avoid_: Notebook, vault, internal library
+A collection of Local Documents shown together in InkWisp. Every installation has one Managed Workspace and may also connect user-authorized folders.
+_Avoid_: Notebook, vault, file picker
+
+**Managed Workspace**:
+The zero-setup default Workspace created by InkWisp for ordinary writing, where a document's first meaningful title supplies its default filename.
+_Avoid_: Scratch folder, demo workspace, temporary library
+
+**Connected Folder**:
+A user-authorized filesystem folder whose Markdown documents InkWisp edits in place without importing copies into the Managed Workspace.
+_Avoid_: External workspace, imported folder
 
 **Standalone Document**:
 A single Markdown file opened through the Android document picker outside a Workspace.
 _Avoid_: Imported note, loose note
 
 **Scratch Document**:
-An app-private temporary Markdown document available before a Workspace or Standalone Document is chosen, which must be explicitly saved to user-owned storage to become a Local Document.
-_Avoid_: Default note, internal library, unsaved file
+A short-lived recovery document used only while a Managed Workspace document is being created or recovered.
+_Avoid_: Default note, permanent draft, unsaved file
 
 **Managed Attachment**:
 A media file copied into a Workspace attachment directory and referenced from Markdown by a relative path. It is not automatically deleted with a document because multiple documents may reference it.

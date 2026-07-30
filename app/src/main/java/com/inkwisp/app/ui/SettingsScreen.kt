@@ -80,6 +80,7 @@ fun SettingsScreen(
     var draft by remember { mutableStateOf(ConnectionDraft(baseUrl = defaultBaseUrl(ModelProtocol.OpenAiChat))) }
     var providerExpanded by remember { mutableStateOf(false) }
     var protocolExpanded by remember { mutableStateOf(false) }
+    var showAdvanced by remember { mutableStateOf(false) }
     val isChinese = LocalConfiguration.current.locales[0].language == "zh"
     val tr: (String, String) -> String = { english, chinese -> if (isChinese) chinese else english }
 
@@ -217,7 +218,7 @@ fun SettingsScreen(
                     onExpandedChange = { providerExpanded = it },
                 ) {
                     OutlinedTextField(
-                        value = tr("Choose a provider or custom protocol", "选择服务商或自定义协议"),
+                        value = draft.name.ifBlank { tr("Choose a provider", "选择服务商") },
                         onValueChange = {},
                         readOnly = true,
                         label = { Text(tr("Provider preset", "服务商预设")) },
@@ -254,6 +255,7 @@ fun SettingsScreen(
                                         modelId = preset.exampleModel,
                                         requiresApiKey = preset.requiresApiKey,
                                     )
+                                    if (preset.category == ProviderCategory.Custom) showAdvanced = true
                                     providerExpanded = false
                                 },
                             )
@@ -261,6 +263,15 @@ fun SettingsScreen(
                     }
                 }
             }
+            item {
+                TextButton(onClick = { showAdvanced = !showAdvanced }) {
+                    Text(
+                        if (showAdvanced) tr("Hide advanced settings", "收起高级设置")
+                        else tr("Advanced settings", "高级设置"),
+                    )
+                }
+            }
+            if (showAdvanced) {
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable {
@@ -334,6 +345,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
             }
             item {
                 OutlinedTextField(

@@ -13,7 +13,13 @@ if (-not $sdkLine) {
 $sdk = ($sdkLine -replace "^sdk.dir=", "") -replace "\\:", ":" -replace "\\\\", "\"
 $adb = Join-Path $sdk "platform-tools\adb.exe"
 $capture = Join-Path $env:TEMP "inkwisp-editor-render.png"
+$apk = Join-Path $repoRoot "app\build\outputs\apk\debug\app-debug.apk"
 
+if (-not (Test-Path -LiteralPath $apk)) {
+    throw "Debug APK is missing. Run .\\gradlew.bat :app:assembleDebug first."
+}
+
+& $adb install -r $apk | Out-Null
 & $adb shell pm clear com.inkwisp.app | Out-Null
 & $adb shell am start -W -n com.inkwisp.app/.MainActivity | Out-Null
 Start-Sleep -Seconds 3

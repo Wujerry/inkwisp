@@ -114,6 +114,8 @@ import com.inkwisp.app.editor.EditorController
 import com.inkwisp.app.model.EditorMode
 import com.inkwisp.app.model.EditorUiState
 import com.inkwisp.app.model.SaveState
+import com.inkwisp.app.model.PredictionState
+import com.inkwisp.app.model.titleWithoutMarkdownExtension
 import com.inkwisp.app.ui.theme.InkWispTheme
 import com.inkwisp.app.ui.SettingsScreen
 import com.inkwisp.app.export.ExportFormat
@@ -146,9 +148,6 @@ class MainActivity : AppCompatActivity() {
     private val exportText = registerForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
     ) { uri -> uri?.let { viewModel.exportDocument(it, ExportFormat.PlainText) } }
-    private val createDocument = registerForActivityResult(
-        ActivityResultContracts.CreateDocument("text/markdown"),
-    ) { uri -> uri?.let(viewModel::createDocument) }
     private val importImage = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let(viewModel::importAttachment) }
@@ -165,8 +164,9 @@ class MainActivity : AppCompatActivity() {
                     state = state,
                     viewModel = viewModel,
                     onOpenWorkspace = { openWorkspace.launch(null) },
+                    onOpenManagedWorkspace = viewModel::openManagedWorkspace,
                     onOpenDocument = { openDocument.launch(arrayOf("text/markdown", "text/plain")) },
-                    onNewDocument = { createDocument.launch("untitled.md") },
+                    onNewDocument = viewModel::newDocument,
                     onInsertImage = { importImage.launch(arrayOf("image/*")) },
                     onSaveConflictCopy = { title -> createConflictCopy.launch("${title.substringBeforeLast('.')}-copy.md") },
                     onExport = { format, title ->
@@ -239,6 +239,7 @@ private fun InkWispApp(
     state: EditorUiState,
     viewModel: EditorViewModel,
     onOpenWorkspace: () -> Unit,
+    onOpenManagedWorkspace: () -> Unit,
     onOpenDocument: () -> Unit,
     onNewDocument: () -> Unit,
     onInsertImage: () -> Unit,
@@ -276,6 +277,7 @@ private fun InkWispApp(
                 WorkspacePanel(
                     state = state,
                     onOpenWorkspace = onOpenWorkspace,
+                    onOpenManagedWorkspace = onOpenManagedWorkspace,
                     onOpenDocument = onOpenDocument,
                     onNewDocument = onNewDocument,
                     onFileSelected = { viewModel.openDocument(it.uri, it.name) },
@@ -297,6 +299,8 @@ private fun InkWispApp(
                     onEditorCommand = viewModel::handleEditorCommand,
                     onInsertionHandled = viewModel::insertionHandled,
                     onSave = viewModel::saveNow,
+                    onSelectConnection = viewModel::selectConnection,
+                    onModelSettings = { viewModel.showSettings(true) },
                     onInsertImage = onInsertImage,
                     onExport = { format ->
                         onExport(format, state.activeDocument?.title ?: "document.md")
@@ -317,6 +321,7 @@ private fun InkWispApp(
                         WorkspacePanel(
                             state = state,
                             onOpenWorkspace = onOpenWorkspace,
+                            onOpenManagedWorkspace = onOpenManagedWorkspace,
                             onOpenDocument = onOpenDocument,
                             onNewDocument = onNewDocument,
                             onFileSelected = {
@@ -340,6 +345,8 @@ private fun InkWispApp(
                     onEditorCommand = viewModel::handleEditorCommand,
                     onInsertionHandled = viewModel::insertionHandled,
                     onSave = viewModel::saveNow,
+                    onSelectConnection = viewModel::selectConnection,
+                    onModelSettings = { viewModel.showSettings(true) },
                     onInsertImage = onInsertImage,
                     onExport = { format ->
                         onExport(format, state.activeDocument?.title ?: "document.md")
@@ -518,6 +525,8 @@ private fun EditorSurface(
     onEditorCommand: (String) -> Unit,
     onInsertionHandled: (Long) -> Unit,
     onSave: () -> Unit,
+    onSelectConnection: (String) -> Unit,
+    onModelSettings: () -> Unit,
     onInsertImage: () -> Unit,
     onExport: (ExportFormat) -> Unit,
     showMenu: Boolean,
@@ -525,7 +534,7 @@ private fun EditorSurface(
 ) {
     val editorController = remember { EditorController() }
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.imePadding(),
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -536,6 +545,8 @@ private fun EditorSurface(
                 onSave = onSave,
                 onExport = onExport,
                 onModeChange = onModeChange,
+                onSelectConnection = onSelectConnection,
+                onModelSettings = onModelSettings,
             )
         },
         bottomBar = {
@@ -543,7 +554,7 @@ private fun EditorSurface(
                 onCommand = editorController::runFormatCommand,
                 onAssistedEdit = editorController::requestAssistedEdit,
                 onInsertImage = onInsertImage,
-                modifier = Modifier.imePadding().navigationBarsPadding(),
+                modifier = Modifier.navigationBarsPadding(),
             )
         },
     ) { padding ->
@@ -597,6 +608,8 @@ private fun DocumentHeader(
     onSave: () -> Unit,
     onExport: (ExportFormat) -> Unit,
     onModeChange: (EditorMode) -> Unit,
+    onSelectConnection: (String) -> Unit,
+    onModelSettings: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -633,16 +646,13 @@ private fun DocumentHeader(
                     )
                     SaveStatus(state)
                 }
+                PredictionConnectionChip(
+                    state = state,
+                    onSelect = onSelectConnection,
+                    onSettings = onModelSettings,
+                )
                 HeaderModeToggle(mode = state.editorMode, onModeChange = onModeChange)
-                IconButton(onClick = onSave, enabled = state.saveState != SaveState.Saving) {
-                    Icon(
-                        Icons.Default.Check,
-                        contentDescription = stringResource(R.string.saved),
-                        tint = if (state.saveState == SaveState.Saved) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-                ExportMenu(onExport)
+                ExportMenu(onSave = onSave, onExport = onExport)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
         }
@@ -650,13 +660,117 @@ private fun DocumentHeader(
 }
 
 @Composable
-private fun ExportMenu(onExport: (ExportFormat) -> Unit) {
+private fun PredictionConnectionChip(
+    state: EditorUiState,
+    onSelect: (String) -> Unit,
+    onSettings: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val connection = state.selectedConnection
+    val status = when (state.predictionState) {
+        PredictionState.Disabled -> stringResource(R.string.setup_predict)
+        PredictionState.Idle -> stringResource(R.string.predict_ready)
+        PredictionState.Loading -> stringResource(R.string.predict_loading)
+        PredictionState.Ready -> stringResource(R.string.predict_available)
+        PredictionState.Error -> stringResource(R.string.predict_paused)
+    }
+    val emphasized = state.predictionState == PredictionState.Loading ||
+        state.predictionState == PredictionState.Ready
+    Box {
+        Row(
+            modifier = Modifier
+                .widthIn(max = 150.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(
+                    if (emphasized) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                    else MaterialTheme.colorScheme.surfaceContainerLow,
+                )
+                .clickable { expanded = true }
+                .padding(horizontal = 9.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier.size(7.dp).clip(CircleShape).background(
+                    when (state.predictionState) {
+                        PredictionState.Disabled, PredictionState.Error -> MaterialTheme.colorScheme.outline
+                        PredictionState.Loading, PredictionState.Ready -> MaterialTheme.colorScheme.primary
+                        PredictionState.Idle -> MaterialTheme.colorScheme.primary.copy(alpha = 0.68f)
+                    },
+                ),
+            )
+            Spacer(Modifier.width(7.dp))
+            Column(Modifier.weight(1f, fill = false)) {
+                Text(
+                    text = connection?.name ?: stringResource(R.string.inline_predict),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Text(
+                    text = status,
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (emphasized) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        stringResource(R.string.inline_predict),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                },
+                enabled = false,
+                onClick = {},
+            )
+            state.modelConnections.forEach { candidate ->
+                DropdownMenuItem(
+                    text = { Text(candidate.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = {
+                        if (candidate.id == state.selectedConnectionId) {
+                            Icon(Icons.Default.Check, contentDescription = null)
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(candidate.id)
+                    },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.model_settings)) },
+                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onSettings()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExportMenu(onSave: () -> Unit, onExport: (ExportFormat) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { expanded = true }) {
             Icon(Icons.Default.MoreVert, contentDescription = "Export")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.save_now)) },
+                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onSave()
+                },
+            )
             ExportFormat.entries.forEach { format ->
                 DropdownMenuItem(
                     text = { Text("Export ${format.name}") },
@@ -674,6 +788,7 @@ private fun ExportMenu(onExport: (ExportFormat) -> Unit) {
 private fun WorkspacePanel(
     state: EditorUiState,
     onOpenWorkspace: () -> Unit,
+    onOpenManagedWorkspace: () -> Unit,
     onOpenDocument: () -> Unit,
     onNewDocument: () -> Unit,
     onFileSelected: (com.inkwisp.app.model.WorkspaceFile) -> Unit,
@@ -681,6 +796,7 @@ private fun WorkspacePanel(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isManagedWorkspace = state.workspaceUri?.scheme == "inkwisp"
     Column(
         modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -702,7 +818,9 @@ private fun WorkspacePanel(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = stringResource(R.string.workspace),
+                    text = stringResource(
+                        if (isManagedWorkspace) R.string.managed_workspace else R.string.connected_folder,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -759,13 +877,30 @@ private fun WorkspacePanel(
                 }
             },
         )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        Button(
+            onClick = onNewDocument,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, end = 16.dp),
+            shape = RoundedCornerShape(10.dp),
         ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.new_document))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 9.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            if (!isManagedWorkspace) {
+                WorkspaceQuickAction(
+                    icon = Icons.Default.Description,
+                    label = stringResource(R.string.my_writings),
+                    onClick = onOpenManagedWorkspace,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             WorkspaceQuickAction(
                 icon = Icons.Default.FolderOpen,
-                label = stringResource(R.string.open_workspace_short),
+                label = stringResource(R.string.connect_folder),
                 onClick = onOpenWorkspace,
                 modifier = Modifier.weight(1f),
             )
@@ -775,17 +910,18 @@ private fun WorkspacePanel(
                 onClick = onOpenDocument,
                 modifier = Modifier.weight(1f),
             )
-            WorkspaceQuickAction(
-                icon = Icons.Default.Add,
-                label = stringResource(R.string.new_document_short),
-                onClick = onNewDocument,
-                modifier = Modifier.weight(1f),
-            )
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn(modifier = Modifier.weight(1f)) {
             val activeIsOutsideList = state.activeDocument?.let { active ->
-                active.isScratch || active.uri == null || state.files.none { it.uri == active.uri }
+                val managedTitleMatch = isManagedWorkspace && state.files.any { file ->
+                    titleWithoutMarkdownExtension(file.name).equals(
+                        titleWithoutMarkdownExtension(active.title),
+                        ignoreCase = true,
+                    )
+                }
+                active.isScratch || active.uri == null ||
+                    (!managedTitleMatch && state.files.none { it.uri == active.uri })
             } == true
             if (activeIsOutsideList) {
                 item(key = "current-document-label") {
@@ -1051,7 +1187,6 @@ private fun SaveStatus(state: EditorUiState) {
         append(saveText)
         append(" · ")
         append(wordCountText)
-        if (state.predictionState == com.inkwisp.app.model.PredictionState.Loading) append(" · AI…")
         if (state.predictionContextFiles.isNotEmpty()) {
             append(" · ")
             append(contextCountText)

@@ -20,6 +20,7 @@ data class ActiveDocument(
     val isScratch: Boolean,
     val revision: Long = 0,
     val sourceFingerprint: String? = null,
+    val autoNameFromTitle: Boolean = false,
 )
 
 data class EditConflict(

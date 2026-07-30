@@ -68,6 +68,28 @@ class PredictionWidget extends WidgetType {
   }
 }
 
+class MarkdownMarkerWidget extends WidgetType {
+  constructor(readonly glyph: string, readonly className: string) {
+    super();
+  }
+
+  eq(other: MarkdownMarkerWidget): boolean {
+    return other.glyph === this.glyph && other.className === this.className;
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement("span");
+    span.className = this.className;
+    span.textContent = this.glyph;
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
 const predictionField = StateField.define<{ at: number; text: string } | null>({
   create: () => null,
   update(value, transaction) {
@@ -94,6 +116,8 @@ const hiddenMarkerNames = new Set([
   "CodeMark",
   "LinkMark",
   "URL",
+  "StrikethroughMark",
+  "CodeInfo",
 ]);
 
 function buildInstantDecorations(view: EditorView): DecorationSet {
@@ -123,7 +147,7 @@ function buildInstantDecorations(view: EditorView): DecorationSet {
     enter(node) {
         const line = view.state.doc.lineAt(node.from);
         const activeLine = line.number === cursorLine;
-        const cursorTouchesMarker = activeLine && cursor >= node.from && cursor <= node.to;
+        const cursorTouchesMarker = activeLine && cursor > node.from && cursor < node.to;
         if (!cursorTouchesMarker && hiddenMarkerNames.has(node.name) && node.from < node.to) {
           ranges.push(Decoration.replace({}).range(node.from, node.to));
         }
@@ -137,6 +161,33 @@ function buildInstantDecorations(view: EditorView): DecorationSet {
           ranges.push(Decoration.mark({ class: "iw-quote" }).range(node.from, node.to));
         } else if (node.name === "Link") {
           ranges.push(Decoration.mark({ class: "iw-link" }).range(node.from, node.to));
+        } else if (node.name === "Strikethrough") {
+          ranges.push(Decoration.mark({ class: "iw-strike" }).range(node.from, node.to));
+        } else if (node.name === "FencedCode" || node.name === "CodeBlock") {
+          ranges.push(Decoration.mark({ class: "iw-code-block" }).range(node.from, node.to));
+        } else if (node.name === "ListMark" && !cursorTouchesMarker) {
+          const isTask = /^\s*[-+*]\s+\[[ xX]\]/.test(line.text);
+          ranges.push(
+            (isTask
+              ? Decoration.replace({})
+              : Decoration.replace({ widget: new MarkdownMarkerWidget("•", "iw-list-marker") }))
+              .range(node.from, node.to),
+          );
+        } else if (node.name === "TaskMarker" && !cursorTouchesMarker) {
+          const checked = /[xX]/.test(view.state.sliceDoc(node.from, node.to));
+          ranges.push(
+            Decoration.replace({
+              widget: new MarkdownMarkerWidget(checked ? "☑" : "☐", `iw-task-marker${checked ? " is-checked" : ""}`),
+            }).range(node.from, node.to),
+          );
+        } else if (node.name === "QuoteMark" && !cursorTouchesMarker) {
+          ranges.push(Decoration.replace({}).range(node.from, Math.min(node.to + 1, line.to)));
+          ranges.push(Decoration.line({ class: "iw-quote-line" }).range(line.from));
+        } else if (node.name === "HorizontalRule") {
+          ranges.push(
+            Decoration.replace({ widget: new MarkdownMarkerWidget("", "iw-horizontal-rule") })
+              .range(node.from, node.to),
+          );
         }
     },
   });
@@ -175,6 +226,19 @@ const instantRender = ViewPlugin.fromClass(
 let nativeRevision = 0;
 let pointerStart: { x: number; y: number } | null = null;
 
+function scheduleKeyboardSafeScroll(target: EditorView): void {
+  window.setTimeout(() => {
+    if (!target.hasFocus) return;
+    const compactViewport = (window.visualViewport?.height ?? window.innerHeight) < 560;
+    target.dispatch({
+      effects: EditorView.scrollIntoView(target.state.selection.main.head, {
+        y: compactViewport ? "center" : "nearest",
+        yMargin: compactViewport ? 96 : 48,
+      }),
+    });
+  }, 0);
+}
+
 const state = EditorState.create({
   doc: "",
   extensions: [
@@ -204,16 +268,17 @@ const state = EditorState.create({
       "aria-label": "Markdown editor",
     }),
     EditorView.updateListener.of((update) => {
-      if (!update.docChanged) return;
-      if (update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(externalDocument)))) {
-        return;
+      if (update.docChanged || update.selectionSet) scheduleKeyboardSafeScroll(update.view);
+      if (update.docChanged && !update.transactions.some(
+        (transaction) => transaction.effects.some((effect) => effect.is(externalDocument)),
+      )) {
+        nativeRevision += 1;
+        window.InkWispNative?.changed(
+          update.state.doc.toString(),
+          nativeRevision,
+          update.state.selection.main.head,
+        );
       }
-      nativeRevision += 1;
-      window.InkWispNative?.changed(
-        update.state.doc.toString(),
-        nativeRevision,
-        update.state.selection.main.head,
-      );
     }),
     EditorView.inputHandler.of((target, from, to, text) => {
       if (from !== to) return false;
@@ -254,6 +319,20 @@ const state = EditorState.create({
 const root = document.querySelector<HTMLElement>("#editor");
 if (!root) throw new Error("Editor root not found");
 const view = new EditorView({ state, parent: root });
+
+function keepCursorAboveKeyboard(): void {
+  if (!view.hasFocus) return;
+  window.requestAnimationFrame(() => {
+    view.dispatch({
+      effects: EditorView.scrollIntoView(view.state.selection.main.head, {
+        y: "center",
+        yMargin: 72,
+      }),
+    });
+  });
+}
+
+window.visualViewport?.addEventListener("resize", keepCursorAboveKeyboard);
 
 function clearPrediction(target: EditorView): boolean {
   if (!target.state.field(predictionField, false)) return false;
@@ -353,6 +432,7 @@ window.InkWispEditor = {
   },
   focus() {
     view.focus();
+    keepCursorAboveKeyboard();
   },
 };
 

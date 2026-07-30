@@ -5,6 +5,12 @@ import com.inkwisp.app.model.ModelProtocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.test.runTest
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
 
 class ModelGatewayTest {
     private val gateway = ModelGateway()
@@ -55,6 +61,35 @@ class ModelGatewayTest {
         assertEquals("responses", gateway.parseResponse(ModelProtocol.OpenAiResponses, """{"output_text":"responses"}"""))
         assertEquals("anthropic", gateway.parseResponse(ModelProtocol.AnthropicMessages, """{"content":[{"type":"text","text":"anthropic"}]}"""))
         assertEquals("gemini", gateway.parseResponse(ModelProtocol.GoogleGemini, """{"candidates":[{"content":{"parts":[{"text":"gemini"}]}}]}"""))
+    }
+
+    @Test
+    fun deepSeekV4DisablesThinkingForLowLatencyWriting() {
+        val request = gateway.createRequest(
+            connection(ModelProtocol.OpenAiChat).copy(modelId = "deepseek-v4-flash"),
+            "secret",
+            input,
+        )
+        val buffer = Buffer()
+        request.body!!.writeTo(buffer)
+
+        assertTrue(buffer.readUtf8().contains("\"thinking\":{\"type\":\"disabled\"}"))
+    }
+
+    @Test
+    fun successfulProbeDoesNotFailWhenReasoningModelReturnsNoVisibleText() = runTest {
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body("""{"choices":[{"message":{"reasoning_content":"OK","content":""}}]}""".toResponseBody())
+                .build()
+        }.build()
+        val probeGateway = ModelGateway(client)
+
+        probeGateway.probe(connection(ModelProtocol.OpenAiChat), "secret", input)
     }
 
     private fun connection(protocol: ModelProtocol) = ModelConnection(

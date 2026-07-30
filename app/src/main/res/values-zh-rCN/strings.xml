@@ -20,10 +20,10 @@
     <string name="open_document_short">文档</string>
     <string name="new_document_short">新建</string>
     <string name="insert_image">插入图片</string>
-    <string name="onboarding_title">写下去，文件仍然属于你。</string>
-    <string name="onboarding_local">本地优先的文件夹，无需续墨账号或云端。</string>
-    <string name="onboarding_editor">即时渲染 Markdown，也可完整查看源码。</string>
-    <string name="onboarding_ai">可选行内 AI，只使用你主动配置的模型服务。</string>
+    <string name="onboarding_title">下一句话，已经在等你。</string>
+    <string name="onboarding_local">停顿片刻，短续写会直接出现在光标处。</string>
+    <string name="onboarding_editor">继续输入即可忽略，向右滑动即可接受。</string>
+    <string name="onboarding_ai">Markdown 保存在本地；续写只使用你配置的模型。</string>
     <string name="start_writing">开始写作</string>
     <string name="word_count">%1$d 词</string>
     <string name="context_count">%1$d 个上下文文件</string>
@@ -40,4 +40,18 @@
     <string name="choose_folder">选择文件夹</string>
     <string name="open_single_file">打开单个文档</string>
     <string name="create_first_document">创建文档</string>
+    <string name="managed_workspace_name">我的文稿</string>
+    <string name="connect_folder">连接文件夹</string>
+    <string name="more_files">更多文件选项</string>
+    <string name="managed_workspace">自动保存在本设备</string>
+    <string name="connected_folder">已连接文件夹</string>
+    <string name="my_writings">我的文稿</string>
+    <string name="inline_predict">行内续写</string>
+    <string name="predict_ready">就绪</string>
+    <string name="predict_loading">预测中…</string>
+    <string name="predict_available">右滑接受</string>
+    <string name="predict_paused">已暂停</string>
+    <string name="setup_predict">配置续写</string>
+    <string name="model_settings">模型设置</string>
+    <string name="save_now">立即保存</string>
 </resources>

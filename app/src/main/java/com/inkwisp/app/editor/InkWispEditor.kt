@@ -2,7 +2,6 @@ package com.inkwisp.app.editor
 
 import android.annotation.SuppressLint
 import android.graphics.Color
-import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -121,11 +120,6 @@ fun InkWispEditor(
         if (!ready) return@LaunchedEffect
         val quoted = JSONObject.quote(content)
         webView?.evaluateJavascript("window.InkWispEditor?.setDocument($quoted, $revision)", null)
-        if (BuildConfig.DEBUG) {
-            webView?.evaluateJavascript(
-                """(function(){const e=document.querySelector('.cm-content');const l=document.querySelector('.cm-line');return JSON.stringify({text:e?.textContent,html:e?.innerHTML,color:getComputedStyle(e).color,fill:getComputedStyle(e).webkitTextFillColor,lineColor:l?getComputedStyle(l).color:null,lineFill:l?getComputedStyle(l).webkitTextFillColor:null,rect:e?.getBoundingClientRect().toJSON()})})()""",
-            ) { result -> Log.d("InkWispEditor", result) }
-        }
     }
 
     LaunchedEffect(ready, mode) {

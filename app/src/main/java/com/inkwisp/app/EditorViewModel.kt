@@ -20,6 +20,8 @@ import com.inkwisp.app.storage.DocumentSafetyStore
 import com.inkwisp.app.model.EditConflict
 import com.inkwisp.app.model.AssistedEditProposal
 import com.inkwisp.app.model.EditorInsertion
+import com.inkwisp.app.model.titleFromMarkdown
+import com.inkwisp.app.model.titleWithoutMarkdownExtension
 import com.inkwisp.app.search.IndexDocument
 import com.inkwisp.app.search.WorkspaceIndex
 import com.inkwisp.app.search.findExplicitReferences
@@ -75,7 +77,34 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun openManagedWorkspace() {
+        viewModelScope.launch {
+            val uri = repository.managedWorkspaceUri
+            preferences.setWorkspace(uri)
+            runCatching { repository.listFiles(uri) }
+                .onSuccess { (name, files) ->
+                    _uiState.update {
+                        it.copy(
+                            workspaceName = name,
+                            workspaceUri = uri,
+                            files = files,
+                            drawerOpen = true,
+                            errorMessage = null,
+                        )
+                    }
+                    rebuildWorkspaceIndex(files)
+                    if (files.isEmpty()) newDocument()
+                    else openDocument(files.first().uri, files.first().name)
+                }
+                .onFailure(::showError)
+        }
+    }
+
     fun openDocument(uri: Uri, title: String? = null) {
+        openDocument(uri, title, autoNameFromTitle = false)
+    }
+
+    private fun openDocument(uri: Uri, title: String? = null, autoNameFromTitle: Boolean) {
         saveJob?.cancel()
         viewModelScope.launch {
             runCatching {
@@ -86,14 +115,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
                 .onSuccess { (stored, recovery, fingerprint) ->
                     val content = recovery ?: stored
+                    val fileName = title ?: uri.lastPathSegment?.substringAfterLast('/')
+                        ?: getApplication<Application>().getString(R.string.open_document)
                     val document = ActiveDocument(
-                        title = title ?: uri.lastPathSegment?.substringAfterLast('/')
-                            ?: getApplication<Application>().getString(R.string.open_document),
+                        title = titleWithoutMarkdownExtension(fileName),
                         uri = uri,
                         content = content,
                         isScratch = false,
                         revision = System.nanoTime(),
                         sourceFingerprint = fingerprint,
+                        autoNameFromTitle = autoNameFromTitle,
                     )
                     lastEditorRevision = -1L
                     preferences.setDocument(uri)
@@ -129,14 +160,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun newDocument() {
+        val workspaceUri = _uiState.value.workspaceUri ?: repository.managedWorkspaceUri
+        val untitled = getApplication<Application>().getString(R.string.scratch_title)
+        viewModelScope.launch {
+            runCatching { repository.createDocument(workspaceUri, untitled) }
+                .onSuccess { uri ->
+                    refreshWorkspaceFiles(workspaceUri)
+                    openDocument(uri, untitled, autoNameFromTitle = true)
+                }
+                .onFailure(::showError)
+        }
+    }
+
     fun onEditorChanged(content: String, editorRevision: Long, cursor: Int) {
         if (editorRevision <= lastEditorRevision) return
         lastEditorRevision = editorRevision
         val current = _uiState.value.activeDocument ?: return
         if (current.content == content) return
+        val derivedTitle = if (current.autoNameFromTitle) titleFromMarkdown(content) else null
         _uiState.update {
             it.copy(
-                activeDocument = current.copy(content = content),
+                activeDocument = current.copy(content = content, title = derivedTitle ?: current.title),
                 saveState = SaveState.Unsaved,
                 predictionText = null,
                 predictionState = if (it.selectedConnection == null) PredictionState.Disabled else PredictionState.Idle,
@@ -222,12 +267,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 protocol = draft.protocol,
                 baseUrl = draft.baseUrl.trim().trimEnd('/'),
                 modelId = draft.modelId.trim(),
-                maxOutputTokens = 8,
+                maxOutputTokens = 64,
                 temperature = 0.0,
                 requiresApiKey = draft.requiresApiKey,
             )
             val result = runCatching {
-                modelGateway.complete(
+                modelGateway.probe(
                     temporary,
                     probeKey,
                     CompletionInput(
@@ -292,7 +337,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         activeDocument = current.copy(
                             uri = uri,
-                            title = uri.lastPathSegment?.substringAfterLast('/') ?: current.title,
+                            title = uri.lastPathSegment?.substringAfterLast('/')
+                                ?.let(::titleWithoutMarkdownExtension) ?: current.title,
                             isScratch = false,
                             sourceFingerprint = DocumentSafetyStore.fingerprint(current.content),
                             revision = System.nanoTime(),
@@ -513,36 +559,57 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun persistActiveDocument() {
         val document = _uiState.value.activeDocument ?: return
         _uiState.update { it.copy(saveState = SaveState.Saving) }
-        runCatching {
+        val result = runCatching {
             if (document.isScratch || document.uri == null) {
                 preferences.setScratch(document.content)
+                PersistOutcome(uri = document.uri, autoNameFromTitle = document.autoNameFromTitle)
             } else {
                 safetyStore.stageRecovery(document.uri, document.content)
                 val external = repository.read(document.uri)
                 val externalFingerprint = DocumentSafetyStore.fingerprint(external)
                 if (document.sourceFingerprint != null && externalFingerprint != document.sourceFingerprint) {
-                    return@runCatching EditConflict(external, externalFingerprint)
-                }
-                repository.write(document.uri, document.content)
-                safetyStore.recordRevision(document.uri, document.content)
-                safetyStore.clearRecovery(document.uri)
-            }
-            null
-        }.onSuccess {
-            if (it is EditConflict) {
-                _uiState.update { state -> state.copy(saveState = SaveState.Error, editConflict = it) }
-            } else {
-                _uiState.update { state ->
-                    state.copy(
-                        saveState = SaveState.Saved,
-                        activeDocument = state.activeDocument?.copy(
-                            sourceFingerprint = DocumentSafetyStore.fingerprint(document.content),
-                        ),
+                    return@runCatching PersistOutcome(
+                        conflict = EditConflict(external, externalFingerprint),
+                        uri = document.uri,
+                        autoNameFromTitle = document.autoNameFromTitle,
                     )
                 }
+                repository.write(document.uri, document.content)
+                val hasMeaningfulTitle = titleFromMarkdown(document.content) != null
+                val finalUri = if (document.autoNameFromTitle && hasMeaningfulTitle) {
+                    repository.renameManagedDocument(document.uri, document.title)
+                } else document.uri
+                if (finalUri != document.uri) preferences.setDocument(finalUri)
+                safetyStore.recordRevision(finalUri, document.content)
+                safetyStore.clearRecovery(document.uri)
+                if (finalUri != document.uri) safetyStore.clearRecovery(finalUri)
+                PersistOutcome(
+                    uri = finalUri,
+                    autoNameFromTitle = document.autoNameFromTitle && !hasMeaningfulTitle,
+                )
             }
-        }.onFailure { failure ->
+        }
+        result.onFailure { failure ->
             _uiState.update { it.copy(saveState = SaveState.Error, errorMessage = failure.message) }
+            return
+        }
+        val outcome = result.getOrThrow()
+        if (outcome.conflict != null) {
+            _uiState.update { state -> state.copy(saveState = SaveState.Error, editConflict = outcome.conflict) }
+            return
+        }
+        _uiState.update { state ->
+            state.copy(
+                saveState = SaveState.Saved,
+                activeDocument = state.activeDocument?.copy(
+                    uri = outcome.uri,
+                    autoNameFromTitle = outcome.autoNameFromTitle,
+                    sourceFingerprint = DocumentSafetyStore.fingerprint(document.content),
+                ),
+            )
+        }
+        if (outcome.uri != document.uri) {
+            _uiState.value.workspaceUri?.let { refreshWorkspaceFiles(it) }
         }
     }
 
@@ -550,21 +617,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val restored = runCatching { preferences.restore() }.getOrNull()
             _uiState.update { it.copy(showOnboarding = restored?.onboardingComplete != true) }
-            restored?.workspaceUri?.takeIf(repository::hasPersistedReadPermission)?.let { uri ->
-                runCatching { repository.listFiles(uri) }.onSuccess { (name, files) ->
-                    _uiState.update { it.copy(workspaceName = name, workspaceUri = uri, files = files) }
+            val workspaceUri = restored?.workspaceUri?.takeIf(repository::hasPersistedReadPermission)
+                ?: repository.managedWorkspaceUri
+            preferences.setWorkspace(workspaceUri)
+            val files = runCatching { repository.listFiles(workspaceUri) }
+                .onSuccess { (name, files) ->
+                    _uiState.update { it.copy(workspaceName = name, workspaceUri = workspaceUri, files = files) }
                     rebuildWorkspaceIndex(files)
                 }
-            }
+                .getOrNull()?.second.orEmpty()
             val restoredDocument = restored?.documentUri?.takeIf(repository::hasPersistedReadPermission)
             if (restoredDocument != null) {
                 openDocument(restoredDocument)
+            } else if (files.isNotEmpty()) {
+                val first = files.first()
+                openDocument(first.uri, first.name)
             } else {
                 if (restored?.documentUri != null) preferences.setDocument(null)
-                newScratch(
-                    restored?.scratch ?: DEFAULT_SCRATCH_CONTENT,
-                )
+                newDocument()
             }
+        }
+    }
+
+    private suspend fun refreshWorkspaceFiles(workspaceUri: Uri) {
+        runCatching { repository.listFiles(workspaceUri) }.onSuccess { (name, files) ->
+            _uiState.update { it.copy(workspaceName = name, workspaceUri = workspaceUri, files = files) }
+            rebuildWorkspaceIndex(files)
         }
     }
 
@@ -617,7 +695,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         const val RETRIEVAL_QUERY_CHARS = 1_200
         const val MAX_CONTEXT_FILES = 4
         const val MAX_INDEX_FILE_CHARS = 500_000
-        const val DEFAULT_SCRATCH_CONTENT = "# Welcome to InkWisp\n\nYour words stay yours. Open a workspace or begin writing here."
         const val PREDICTION_SYSTEM_PROMPT = "You continue Markdown at the cursor. Return only the natural continuation, never commentary, quotation marks, or a complete rewrite. Preserve the nearby language and Markdown style. Keep the continuation concise."
     }
 }
+
+private data class PersistOutcome(
+    val conflict: EditConflict? = null,
+    val uri: Uri?,
+    val autoNameFromTitle: Boolean,
+)

@@ -10,11 +10,11 @@
 - Default interface language: English; Simplified Chinese is selectable and persisted
 - Launcher label: `续墨` on Simplified Chinese systems and `InkWisp` elsewhere
 
-InkWisp is a local-first Android Markdown editor built around instant-render editing and optional user-configured AI assistance. It requires no InkWisp account or backend.
+InkWisp is an Android Markdown editor whose defining interaction is user-configured Inline Prediction at the writing cursor. It combines that with local-first storage and instant-render Markdown, without an InkWisp account or backend.
 
 ## Product principles
 
-1. User-owned files are the source of truth.
+1. Inline Prediction must remain visible, immediate, dismissible, and closer to the cursor than any chat-style AI surface.
 2. Standard Markdown must survive every edit without destructive normalization.
 3. Editing remains complete and usable offline; AI is optional.
 4. AI requests are direct, inspectable, and bounded by explicit context rules.
@@ -23,10 +23,11 @@ InkWisp is a local-first Android Markdown editor built around instant-render edi
 
 ## Documents and workspaces
 
-- A Workspace is a folder authorized through Android's system file access framework.
-- InkWisp edits files in place and persists granted access where the provider permits it.
+- Every installation starts with a zero-setup Managed Workspace named My writings / 我的文稿.
+- New documents are created immediately; the first meaningful line supplies the initial title and default filename.
+- Users may connect a folder through Android's system file access framework, and InkWisp edits those files in place.
 - Users may open Standalone Documents without creating a Workspace.
-- A single app-private Scratch Document allows immediate writing before storage is selected; it becomes a Local Document only after an explicit save.
+- Scratch Documents are recovery-only; ordinary first use starts in a saved Managed Workspace document.
 - Workspaces support creation, rename, move, duplicate, delete, recent documents, file tree navigation, outline navigation, and full-text search.
 - Built-in cloud synchronization and Git are out of scope. External document providers and synchronization tools may modify files.
 - Externally modified files must never be overwritten silently. Conflicts offer reload, keep current content, save as copy, and previewed non-overlapping merge.
@@ -142,8 +143,8 @@ InkWisp is a local-first Android Markdown editor built around instant-render edi
 ## Onboarding
 
 - No sign-in or model setup is required.
-- At most three concise pages explain local files, instant-render editing, and optional AI.
-- The user can immediately write in a Scratch Document or choose a Workspace.
+- At most three concise pages explain Inline Prediction, standard Markdown, and local storage.
+- The user immediately enters a saved document in the Managed Workspace; connecting a folder is optional.
 - AI stays unobtrusively unavailable until a Model Connection exists; the first AI invocation offers contextual setup.
 
 ## Privacy and diagnostics
@@ -179,4 +180,3 @@ InkWisp is a local-first Android Markdown editor built around instant-render edi
 - DOCX export
 - Permanent AI chat interface
 - Ads, subscriptions, or billing in the initial release
-
