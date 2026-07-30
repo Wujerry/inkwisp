@@ -784,6 +784,28 @@ private fun WorkspacePanel(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         LazyColumn(modifier = Modifier.weight(1f)) {
+            val activeIsOutsideList = state.activeDocument?.let { active ->
+                active.isScratch || active.uri == null || state.files.none { it.uri == active.uri }
+            } == true
+            if (activeIsOutsideList) {
+                item(key = "current-document-label") {
+                    WorkspaceSectionLabel(stringResource(R.string.current_document))
+                }
+                item(key = "current-document") {
+                    ActiveDocumentRow(
+                        title = state.activeDocument.title,
+                        detail = stringResource(
+                            if (state.activeDocument.isScratch) R.string.scratch_document
+                            else R.string.standalone_document,
+                        ),
+                    )
+                }
+            }
+            if (state.filteredFiles.isNotEmpty()) {
+                item(key = "workspace-files-label") {
+                    WorkspaceSectionLabel(stringResource(R.string.workspace_files))
+                }
+            }
             items(state.filteredFiles, key = { it.uri.toString() }) { file ->
                 WorkspaceFileRow(
                     name = file.name,
@@ -791,6 +813,17 @@ private fun WorkspacePanel(
                     selected = state.activeDocument?.uri == file.uri,
                     onClick = { onFileSelected(file) },
                 )
+            }
+            if (state.filteredFiles.isEmpty()) {
+                item(key = "workspace-empty-state") {
+                    WorkspaceEmptyState(
+                        hasWorkspace = state.workspaceUri != null,
+                        hasSearch = state.searchQuery.isNotBlank(),
+                        onOpenWorkspace = onOpenWorkspace,
+                        onOpenDocument = onOpenDocument,
+                        onNewDocument = onNewDocument,
+                    )
+                }
             }
             if (state.backlinks.isNotEmpty()) {
                 item {
@@ -843,6 +876,105 @@ private fun WorkspacePanel(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceSectionLabel(label: String) {
+    Text(
+        text = label.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 7.dp),
+    )
+}
+
+@Composable
+private fun ActiveDocumentRow(title: String, detail: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(34.dp).clip(RoundedCornerShape(9.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                detail,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceEmptyState(
+    hasWorkspace: Boolean,
+    hasSearch: Boolean,
+    onOpenWorkspace: () -> Unit,
+    onOpenDocument: () -> Unit,
+    onNewDocument: () -> Unit,
+) {
+    val title = when {
+        hasSearch -> stringResource(R.string.empty_search_title)
+        hasWorkspace -> stringResource(R.string.empty_folder_title)
+        else -> stringResource(R.string.empty_workspace_title)
+    }
+    val body = when {
+        hasSearch -> stringResource(R.string.empty_search_body)
+        hasWorkspace -> stringResource(R.string.empty_folder_body)
+        else -> stringResource(R.string.empty_workspace_body)
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.Start,
+    ) {
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(15.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.09f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (hasSearch) Icons.Default.Search else Icons.Default.FolderOpen,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (!hasSearch) {
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = if (hasWorkspace) onNewDocument else onOpenWorkspace) {
+                Text(stringResource(if (hasWorkspace) R.string.create_first_document else R.string.choose_folder))
+            }
+            if (!hasWorkspace) {
+                TextButton(onClick = onOpenDocument) {
+                    Text(stringResource(R.string.open_single_file))
+                }
+            }
         }
     }
 }
@@ -1125,7 +1257,10 @@ private fun AssistedEditMenu(onAction: (String) -> Unit) {
                                 style = MaterialTheme.typography.titleLarge,
                             )
                             Text(
-                                tr("Work with the text you selected", "处理你刚刚选中的文字"),
+                                tr(
+                                    "Select a passage, or improve the whole document",
+                                    "选中一段文字，未选择时则处理全文",
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1156,19 +1291,6 @@ private fun AssistedEditMenu(onAction: (String) -> Unit) {
                                 color = MaterialTheme.colorScheme.outlineVariant,
                             )
                         }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                        Spacer(Modifier.width(9.dp))
-                        Text(
-                            tr(
-                                "Only the selected text is sent to your configured model.",
-                                "只会把选中文字发送给你配置的模型服务。",
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 }
             }

@@ -32,7 +32,7 @@
   <p>Users can remove workspace access through InkWisp or Android settings. Uninstalling InkWisp deletes app-private settings, credentials, indexes, recovery copies, and revisions; it does not delete user-owned workspace documents or attachments.</p>
 
   <h2>Optional AI model services</h2>
-  <p>AI features stay disabled until a user configures a model connection and accepts the in-app data-transfer disclosure. When invoked, InkWisp sends the active document excerpt, selected text, and up to four locally retrieved or explicitly referenced workspace passages directly from the device to the endpoint configured by the user. A connection test sends fixed test text and no document content.</p>
+  <p>AI features stay disabled until a user configures a model connection and accepts the in-app data-transfer disclosure. An AI edit sends the complete active document and up to four locally retrieved or explicitly referenced workspace passages directly from the device to the endpoint configured by the user so the model can preserve context and voice. Inline prediction sends only a limited excerpt around the cursor. A connection test sends fixed test text and no document content.</p>
   <p>The publisher does not receive these requests or responses. The configured model provider processes data under its own privacy, retention, and security terms. HTTPS is recommended; user-configured HTTP endpoints, intended for local services, are not encrypted in transit.</p>
 
   <h2>Credentials and security</h2>
@@ -61,7 +61,7 @@
     <h2>本地文件</h2>
     <p>续墨仅访问用户通过 Android 系统文件选择器主动选择的文件和文件夹。文档、本地搜索索引、恢复副本、版本历史、应用设置和模型凭据均保存在用户设备上。续墨不运营账号、同步、行为分析或文档存储服务器。</p>
     <h2>可选 AI 模型服务</h2>
-    <p>只有在用户配置模型连接并确认应用内数据传输说明后，AI 功能才会启用。调用 AI 时，续墨会从设备直接向用户配置的端点发送当前文档片段、所选文本，以及最多四段本地检索或明确引用的工作区内容。发布者不会接收这些请求或回复，服务商的数据处理、保留与安全条款适用。</p>
+    <p>只有在用户配置模型连接并确认应用内数据传输说明后，AI 功能才会启用。AI 编辑会把当前完整文档及最多四段本地检索或明确引用的工作区内容从设备直接发送到用户配置的端点，以保留上下文和写作语气；行内预测只发送光标附近的有限片段。发布者不会接收这些请求或回复，服务商的数据处理、保留与安全条款适用。</p>
     <h2>凭据与安全</h2>
     <p>模型凭据使用 Android Keystore 中的设备绑定密钥加密；保存后不再显示，也不会进入配置导出、诊断信息或工作区文件。</p>
     <h2>保留与删除</h2>

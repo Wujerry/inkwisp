@@ -79,6 +79,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         saveJob?.cancel()
         viewModelScope.launch {
             runCatching {
+                repository.persistReadWritePermission(uri)
                 val stored = repository.read(uri)
                 val recovery = safetyStore.recovery(uri)
                 Triple(stored, recovery, DocumentSafetyStore.fingerprint(stored))
@@ -86,7 +87,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 .onSuccess { (stored, recovery, fingerprint) ->
                     val content = recovery ?: stored
                     val document = ActiveDocument(
-                        title = title ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Document",
+                        title = title ?: uri.lastPathSegment?.substringAfterLast('/')
+                            ?: getApplication<Application>().getString(R.string.open_document),
                         uri = uri,
                         content = content,
                         isScratch = false,
@@ -115,7 +117,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update {
             it.copy(
                 activeDocument = ActiveDocument(
-                    title = "Untitled",
+                    title = getApplication<Application>().getString(R.string.scratch_title),
                     uri = null,
                     content = defaultContent,
                     isScratch = true,
@@ -205,7 +207,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun testConnection(draft: ConnectionDraft) {
-        if (draft.baseUrl.isBlank() || draft.modelId.isBlank() || (draft.requiresApiKey && draft.apiKey.isBlank())) {
+        val probeKey = draft.apiKey.ifBlank {
+            draft.id?.let(connectionStore::credential).orEmpty()
+        }
+        if (draft.baseUrl.isBlank() || draft.modelId.isBlank() || (draft.requiresApiKey && probeKey.isBlank())) {
             _uiState.update { it.copy(connectionTestMessage = "Base URL, Model ID, and the required API key are needed to test.") }
             return
         }
@@ -224,7 +229,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val result = runCatching {
                 modelGateway.complete(
                     temporary,
-                    draft.apiKey,
+                    probeKey,
                     CompletionInput(
                         system = "Reply with exactly OK.",
                         prompt = "Connection test. Do not use or request document content.",
@@ -404,6 +409,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             "grammar" -> "Fix grammar, spelling, and punctuation without changing voice."
             else -> "Improve this text while preserving its intended meaning."
         }
+        val beforeTarget = document.content.substring(0, from)
+        val afterTarget = document.content.substring(to)
         viewModelScope.launch {
             _uiState.update { it.copy(assistedEditLoading = true) }
             val result = runCatching {
@@ -411,8 +418,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     connection,
                     credential,
                     CompletionInput(
-                        system = "You edit selected Markdown. Return only replacement Markdown with no commentary or fences.",
-                        prompt = "$instruction\n\n<selection>\n$selectedText\n</selection>",
+                        system = "You edit a target inside a complete Markdown document. Use the entire document for context, but return only replacement Markdown for the target, with no commentary or fences.",
+                        prompt = buildString {
+                            appendLine(instruction)
+                            appendLine()
+                            appendLine("<document>")
+                            append(beforeTarget)
+                            appendLine("<target>")
+                            append(selectedText)
+                            appendLine("</target>")
+                            append(afterTarget)
+                            appendLine("</document>")
+                        },
                     ),
                 )
             }
@@ -533,16 +550,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val restored = runCatching { preferences.restore() }.getOrNull()
             _uiState.update { it.copy(showOnboarding = restored?.onboardingComplete != true) }
-            restored?.workspaceUri?.let { uri ->
+            restored?.workspaceUri?.takeIf(repository::hasPersistedReadPermission)?.let { uri ->
                 runCatching { repository.listFiles(uri) }.onSuccess { (name, files) ->
                     _uiState.update { it.copy(workspaceName = name, workspaceUri = uri, files = files) }
                     rebuildWorkspaceIndex(files)
                 }
             }
-            val restoredDocument = restored?.documentUri
+            val restoredDocument = restored?.documentUri?.takeIf(repository::hasPersistedReadPermission)
             if (restoredDocument != null) {
                 openDocument(restoredDocument)
             } else {
+                if (restored?.documentUri != null) preferences.setDocument(null)
                 newScratch(
                     restored?.scratch ?: DEFAULT_SCRATCH_CONTENT,
                 )

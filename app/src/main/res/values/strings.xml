@@ -27,4 +27,17 @@
     <string name="start_writing">Start writing</string>
     <string name="word_count">%1$d words</string>
     <string name="context_count">%1$d context files</string>
+    <string name="current_document">Current document</string>
+    <string name="workspace_files">Workspace files</string>
+    <string name="scratch_document">Draft on this device</string>
+    <string name="standalone_document">Opened outside the workspace</string>
+    <string name="empty_workspace_title">Choose where your writing lives</string>
+    <string name="empty_workspace_body">Open a folder to browse and edit its Markdown files in place, or open one document without creating a workspace.</string>
+    <string name="empty_folder_title">No Markdown files in this folder</string>
+    <string name="empty_folder_body">Create the first document, or choose another folder.</string>
+    <string name="empty_search_title">No matching documents</string>
+    <string name="empty_search_body">Try a different title, path, or phrase.</string>
+    <string name="choose_folder">Choose folder</string>
+    <string name="open_single_file">Open one file</string>
+    <string name="create_first_document">Create document</string>
 </resources>

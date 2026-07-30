@@ -27,4 +27,17 @@
     <string name="start_writing">开始写作</string>
     <string name="word_count">%1$d 词</string>
     <string name="context_count">%1$d 个上下文文件</string>
+    <string name="current_document">当前文档</string>
+    <string name="workspace_files">工作区文件</string>
+    <string name="scratch_document">保存在本设备的草稿</string>
+    <string name="standalone_document">在工作区之外打开</string>
+    <string name="empty_workspace_title">先选择文字存放的位置</string>
+    <string name="empty_workspace_body">打开文件夹后，可原地浏览和编辑其中的 Markdown；也可以只打开一个文档，不创建工作区。</string>
+    <string name="empty_folder_title">这个文件夹里还没有 Markdown</string>
+    <string name="empty_folder_body">创建第一篇文档，或者换一个文件夹。</string>
+    <string name="empty_search_title">没有找到匹配文档</string>
+    <string name="empty_search_body">换一个标题、路径或正文关键词试试。</string>
+    <string name="choose_folder">选择文件夹</string>
+    <string name="open_single_file">打开单个文档</string>
+    <string name="create_first_document">创建文档</string>
 </resources>

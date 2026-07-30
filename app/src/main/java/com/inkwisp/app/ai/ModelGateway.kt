@@ -44,13 +44,23 @@ class ModelGateway(
         input: CompletionInput,
     ): String = withContext(Dispatchers.IO) {
         val request = createRequest(connection, apiKey, input)
-        client.newCall(request).execute().use { response ->
-            val body = response.body.string()
-            if (!response.isSuccessful) {
-                throw IOException("${response.code}: ${extractError(body)}")
+        try {
+            client.newCall(request).execute().use { response ->
+                val body = response.body.string()
+                if (!response.isSuccessful) {
+                    throw ModelRequestException(
+                        "HTTP ${response.code} at ${request.url.host}${request.url.encodedPath}: ${extractError(body)}",
+                    )
+                }
+                parseResponse(connection.protocol, body).trim()
+                    .ifEmpty { throw ModelRequestException("The model returned an empty response from ${request.url.host}.") }
             }
-            parseResponse(connection.protocol, body).trim()
-                .ifEmpty { throw IOException("The model returned an empty response.") }
+        } catch (failure: IOException) {
+            if (failure is ModelRequestException) throw failure
+            throw ModelRequestException(
+                "Could not reach ${request.url.host}${request.url.encodedPath}: ${failure.message ?: "network error"}",
+                failure,
+            )
         }
     }
 
@@ -66,7 +76,7 @@ class ModelGateway(
         val (url, body) = when (connection.protocol) {
             ModelProtocol.OpenAiChat -> endpoint(connection.baseUrl, "chat/completions") to openAiChatBody(connection, input)
             ModelProtocol.OpenAiResponses -> endpoint(connection.baseUrl, "responses") to openAiResponsesBody(connection, input)
-            ModelProtocol.AnthropicMessages -> endpoint(connection.baseUrl, "messages") to anthropicBody(connection, input)
+            ModelProtocol.AnthropicMessages -> anthropicEndpoint(connection.baseUrl) to anthropicBody(connection, input)
             ModelProtocol.GoogleGemini -> {
                 val model = URLEncoder.encode(connection.modelId, Charsets.UTF_8.name()).replace("+", "%20")
                 endpoint(connection.baseUrl, "models/$model:generateContent") to geminiBody(connection, input)
@@ -165,6 +175,15 @@ class ModelGateway(
         return if (normalized.endsWith("/$path")) normalized else "$normalized/$path"
     }
 
+    private fun anthropicEndpoint(base: String): String {
+        val normalized = base.trimEnd('/')
+        return when {
+            normalized.endsWith("/v1/messages") || normalized.endsWith("/messages") -> normalized
+            normalized.endsWith("/v1") -> "$normalized/messages"
+            else -> "$normalized/v1/messages"
+        }
+    }
+
     private fun extractError(body: String): String = runCatching {
         val root = json.parseToJsonElement(body).jsonObject
         root["error"]?.let { error ->
@@ -177,3 +196,5 @@ class ModelGateway(
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 }
+
+private class ModelRequestException(message: String, cause: Throwable? = null) : IOException(message, cause)

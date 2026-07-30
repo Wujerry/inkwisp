@@ -148,6 +148,7 @@ body::before {
   letter-spacing: -0.024em;
   padding-top: 0.7em;
   padding-bottom: 0.14em;
+  transition: font-size 150ms ease, line-height 150ms ease, color 150ms ease;
 }
 
 .iw-h1 { font-size: 1.92em; line-height: 1.17; }

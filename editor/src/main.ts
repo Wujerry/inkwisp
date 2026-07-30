@@ -1,7 +1,7 @@
 import "./style.css";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { syntaxHighlighting, defaultHighlightStyle, syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, forceParsing, syntaxHighlighting, defaultHighlightStyle, syntaxTree } from "@codemirror/language";
 import { Compartment, EditorSelection, EditorState, StateEffect, StateField } from "@codemirror/state";
 import {
   Decoration,
@@ -15,6 +15,7 @@ import {
 } from "@codemirror/view";
 import { GFM } from "@lezer/markdown";
 import { formatSelection, type FormatCommand } from "./format";
+import { normalizedHeadingInsertion } from "./instant";
 
 declare global {
   interface Window {
@@ -42,6 +43,7 @@ interface InkWispEditorApi {
 const externalDocument = StateEffect.define<boolean>();
 const setPredictionEffect = StateEffect.define<string>();
 const clearPredictionEffect = StateEffect.define<void>();
+const refreshInstantRenderEffect = StateEffect.define<void>();
 const modeCompartment = new Compartment();
 
 class PredictionWidget extends WidgetType {
@@ -88,7 +90,6 @@ const predictionField = StateField.define<{ at: number; text: string } | null>({
 });
 
 const hiddenMarkerNames = new Set([
-  "HeaderMark",
   "EmphasisMark",
   "CodeMark",
   "LinkMark",
@@ -100,18 +101,30 @@ function buildInstantDecorations(view: EditorView): DecorationSet {
   const cursor = view.state.selection.main.head;
   const cursorLine = view.state.doc.lineAt(cursor).number;
 
-  for (const visible of view.visibleRanges) {
-    syntaxTree(view.state).iterate({
-      from: visible.from,
-      to: visible.to,
-      enter(node) {
+  for (let lineNumber = 1; lineNumber <= view.state.doc.lines; lineNumber += 1) {
+    const line = view.state.doc.line(lineNumber);
+    const heading = /^(#{1,6})(\s+)/.exec(line.text);
+    if (!heading) continue;
+    const level = heading[1].length;
+    const contentStart = line.from + heading[0].length;
+    const cursorTouchesMarker = lineNumber === cursorLine && cursor <= contentStart;
+    ranges.push(Decoration.line({ class: `iw-heading iw-h${level}` }).range(line.from));
+    if (!cursorTouchesMarker) {
+      ranges.push(Decoration.replace({}).range(line.from, contentStart));
+    }
+  }
+
+  const tree = ensureSyntaxTree(
+    view.state,
+    Math.max(view.viewport.to, view.state.selection.main.head),
+    10,
+  ) ?? syntaxTree(view.state);
+  tree.iterate({
+    enter(node) {
         const line = view.state.doc.lineAt(node.from);
         const activeLine = line.number === cursorLine;
-        if (/^ATXHeading[1-6]$/.test(node.name)) {
-          const level = Number(node.name.at(-1));
-          ranges.push(Decoration.line({ class: `iw-heading iw-h${level}` }).range(line.from));
-        }
-        if (!activeLine && hiddenMarkerNames.has(node.name) && node.from < node.to) {
+        const cursorTouchesMarker = activeLine && cursor >= node.from && cursor <= node.to;
+        if (!cursorTouchesMarker && hiddenMarkerNames.has(node.name) && node.from < node.to) {
           ranges.push(Decoration.replace({}).range(node.from, node.to));
         }
         if (node.name === "StrongEmphasis") {
@@ -125,22 +138,35 @@ function buildInstantDecorations(view: EditorView): DecorationSet {
         } else if (node.name === "Link") {
           ranges.push(Decoration.mark({ class: "iw-link" }).range(node.from, node.to));
         }
-      },
-    });
-  }
+    },
+  });
   return Decoration.set(ranges, true);
 }
 
 const instantRender = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    parseTimer: number | null = null;
     constructor(view: EditorView) {
       this.decorations = buildInstantDecorations(view);
+      this.scheduleParsedRefresh(view);
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.viewportChanged) {
+      if (update.docChanged) this.scheduleParsedRefresh(update.view);
+      if (update.docChanged || update.selectionSet || update.viewportChanged || update.transactions.length > 0) {
         this.decorations = buildInstantDecorations(update.view);
       }
+    }
+    scheduleParsedRefresh(view: EditorView) {
+      if (this.parseTimer !== null) window.clearTimeout(this.parseTimer);
+      this.parseTimer = window.setTimeout(() => {
+        this.parseTimer = null;
+        forceParsing(view, Math.max(view.viewport.to, view.state.selection.main.head), 50);
+        view.dispatch({ effects: refreshInstantRenderEffect.of() });
+      }, 0);
+    }
+    destroy() {
+      if (this.parseTimer !== null) window.clearTimeout(this.parseTimer);
     }
   },
   { decorations: (plugin) => plugin.decorations },
@@ -188,6 +214,22 @@ const state = EditorState.create({
         nativeRevision,
         update.state.selection.main.head,
       );
+    }),
+    EditorView.inputHandler.of((target, from, to, text) => {
+      if (from !== to) return false;
+      const line = target.state.doc.lineAt(from);
+      const insertion = normalizedHeadingInsertion(
+        target.state.doc.sliceString(line.from, from),
+        text,
+      );
+      if (insertion === null) return false;
+      target.dispatch({
+        changes: { from, insert: insertion },
+        selection: EditorSelection.cursor(from + insertion.length),
+        scrollIntoView: true,
+        userEvent: "input.type",
+      });
+      return true;
     }),
     EditorView.domEventHandlers({
       pointerdown(event) {
@@ -286,16 +328,18 @@ window.InkWispEditor = {
   },
   requestAssistedEdit(action) {
     const selection = view.state.selection.main;
-    if (selection.empty) {
-      window.InkWispNative?.command(JSON.stringify({ type: "error", message: "Select text first." }));
+    if (view.state.doc.length === 0) {
+      window.InkWispNative?.command(JSON.stringify({ type: "error", message: "Write something first." }));
       return;
     }
+    const from = selection.empty ? 0 : selection.from;
+    const to = selection.empty ? view.state.doc.length : selection.to;
     window.InkWispNative?.command(JSON.stringify({
       type: "assistedEdit",
       action,
-      from: selection.from,
-      to: selection.to,
-      text: view.state.sliceDoc(selection.from, selection.to),
+      from,
+      to,
+      text: view.state.sliceDoc(from, to),
     }));
   },
   insertText(text) {

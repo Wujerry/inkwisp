@@ -12,7 +12,7 @@ Users can delete Workspace access through InkWisp or Android settings. Uninstall
 
 ## AI model services
 
-AI features are optional and remain disabled until a user configures a Model Connection and accepts the in-app data-transfer disclosure. When invoked, InkWisp sends the active document excerpt, the selected text, and up to four locally retrieved or explicitly referenced Workspace passages directly from the device to the model endpoint configured by the user. A connection probe sends only fixed test text and no document content.
+AI features are optional and remain disabled until a user configures a Model Connection and accepts the in-app data-transfer disclosure. An AI edit sends the complete active document and up to four locally retrieved or explicitly referenced Workspace passages directly from the device to the model endpoint configured by the user so the model can preserve context and voice. Inline prediction sends only a limited excerpt around the cursor. A connection probe sends fixed test text and no document content.
 
 InkWisp contributors do not receive these requests or responses. The configured model provider processes data under its own privacy, retention, and security terms. Users should choose a provider and endpoint they trust. HTTPS is recommended; user-configured HTTP endpoints, intended for local services, are not encrypted in transit.
 

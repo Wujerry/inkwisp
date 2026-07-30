@@ -49,6 +49,11 @@ class WorkspaceRepository(private val context: Context) {
         )
     }
 
+    fun hasPersistedReadPermission(uri: Uri): Boolean =
+        resolver.persistedUriPermissions.any { permission ->
+            permission.uri == uri && permission.isReadPermission
+        }
+
     suspend fun importAttachment(treeUri: Uri, sourceUri: Uri): String = withContext(Dispatchers.IO) {
         val root = DocumentFile.fromTreeUri(context, treeUri)
             ?: throw IOException("The selected workspace is unavailable.")

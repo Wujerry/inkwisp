@@ -26,6 +26,20 @@ class ModelGatewayTest {
     }
 
     @Test
+    fun anthropicCompatibleBaseUrlUsesSdkCompatibleV1MessagesPath() {
+        val request = gateway.createRequest(
+            connection(ModelProtocol.AnthropicMessages).copy(
+                baseUrl = "https://api.deepseek.com/anthropic",
+                modelId = "deepseek-v4-flash",
+            ),
+            "secret",
+            input,
+        )
+
+        assertEquals("https://api.deepseek.com/anthropic/v1/messages", request.url.toString())
+    }
+
+    @Test
     fun keylessOpenAiCompatibleConnectionOmitsAuthorization() {
         val request = gateway.createRequest(
             connection(ModelProtocol.OpenAiChat).copy(requiresApiKey = false),

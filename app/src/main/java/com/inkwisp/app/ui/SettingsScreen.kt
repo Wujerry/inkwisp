@@ -61,6 +61,8 @@ import com.inkwisp.app.model.ConnectionDraft
 import com.inkwisp.app.model.EditorUiState
 import com.inkwisp.app.model.ModelConnection
 import com.inkwisp.app.model.ModelProtocol
+import com.inkwisp.app.model.ProviderCatalog
+import com.inkwisp.app.model.ProviderCategory
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +78,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var draft by remember { mutableStateOf(ConnectionDraft(baseUrl = defaultBaseUrl(ModelProtocol.OpenAiChat))) }
+    var providerExpanded by remember { mutableStateOf(false) }
     var protocolExpanded by remember { mutableStateOf(false) }
     val isChinese = LocalConfiguration.current.locales[0].language == "zh"
     val tr: (String, String) -> String = { english, chinese -> if (isChinese) chinese else english }
@@ -209,6 +212,56 @@ fun SettingsScreen(
                 }
             }
             item {
+                ExposedDropdownMenuBox(
+                    expanded = providerExpanded,
+                    onExpandedChange = { providerExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = tr("Choose a provider or custom protocol", "选择服务商或自定义协议"),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(tr("Provider preset", "服务商预设")) },
+                        supportingText = {
+                            Text(tr("Presets only fill the editable fields below.", "预设只负责填写下方字段，所有内容仍可修改。"))
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(providerExpanded) },
+                        modifier = Modifier
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                            .fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = providerExpanded,
+                        onDismissRequest = { providerExpanded = false },
+                    ) {
+                        ProviderCatalog.presets.forEach { preset ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(preset.name, style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            providerCategoryLabel(preset.category, isChinese),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    draft = draft.copy(
+                                        name = preset.name,
+                                        protocol = preset.protocol,
+                                        baseUrl = preset.baseUrl,
+                                        modelId = preset.exampleModel,
+                                        requiresApiKey = preset.requiresApiKey,
+                                    )
+                                    providerExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable {
                         draft = draft.copy(requiresApiKey = !draft.requiresApiKey)
@@ -337,8 +390,8 @@ fun SettingsScreen(
                 Text(tr("AI data transfer", "AI 数据传输"), style = MaterialTheme.typography.titleSmall)
                 Text(
                     tr(
-                        "When AI is enabled, InkWisp sends the active document excerpt and up to four locally retrieved workspace passages directly to the model service you configured. InkWisp does not receive this content. The provider's privacy and retention terms apply.",
-                        "启用 AI 后，续墨会把当前文档片段及最多四段本地检索到的工作区内容，直接发送到你配置的模型服务。续墨不会接收这些内容；数据处理受该服务商的隐私与保留政策约束。",
+                        "When you run an AI edit, InkWisp sends the complete active document and up to four locally retrieved workspace passages directly to the model service you configured so it can preserve context and voice. Inline prediction sends a limited cursor excerpt. InkWisp does not receive this content. The provider's privacy and retention terms apply.",
+                        "运行 AI 编辑时，为了保留上下文和写作语气，续墨会把当前完整文档及最多四段本地检索到的工作区内容直接发送到你配置的模型服务；行内预测只发送光标附近片段。续墨不会接收这些内容，数据处理受该服务商的隐私与保留政策约束。",
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -375,8 +428,8 @@ fun SettingsScreen(
                 SettingsSectionHeader("04", tr("Privacy policy", "隐私政策"))
                 Text(
                     tr(
-                        "InkWisp stores documents, indexes, revisions, settings, and encrypted credentials on this device. It has no account, synchronization, analytics, advertising, or crash-reporting service. AI is optional; when enabled after your confirmation, document excerpts are sent directly to your configured provider under that provider's terms. Uninstalling removes app-private data but never deletes your workspace files.",
-                        "续墨把文档索引、版本、设置及加密凭据保存在本设备，不提供账号、同步、行为分析、广告或远程崩溃报告服务。AI 为可选功能；经你确认后，文档片段会直接发送到你配置的模型服务，并受该服务商条款约束。卸载会删除应用私有数据，但不会删除工作区文件。",
+                        "InkWisp stores documents, indexes, revisions, settings, and encrypted credentials on this device. It has no account, synchronization, analytics, advertising, or crash-reporting service. AI is optional; after your confirmation, an AI edit sends the active document directly to your configured provider under that provider's terms. Uninstalling removes app-private data but never deletes your workspace files.",
+                        "续墨把文档索引、版本、设置及加密凭据保存在本设备，不提供账号、同步、行为分析、广告或远程崩溃报告服务。AI 为可选功能；经你确认后，AI 编辑会把当前文档直接发送到你配置的模型服务，并受该服务商条款约束。卸载会删除应用私有数据，但不会删除工作区文件。",
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -490,6 +543,14 @@ private fun protocolLabel(protocol: ModelProtocol, isChinese: Boolean): String =
     ModelProtocol.OpenAiResponses -> "OpenAI Responses"
     ModelProtocol.AnthropicMessages -> "Anthropic Messages"
     ModelProtocol.GoogleGemini -> "Google Gemini"
+}
+
+private fun providerCategoryLabel(category: ProviderCategory, isChinese: Boolean): String = when (category) {
+    ProviderCategory.Official -> if (isChinese) "官方服务" else "Official service"
+    ProviderCategory.Aggregator -> if (isChinese) "聚合与托管平台" else "Gateway or hosted platform"
+    ProviderCategory.China -> if (isChinese) "国内与亚洲服务" else "China and Asia"
+    ProviderCategory.Local -> if (isChinese) "本地与自托管" else "Local or self-hosted"
+    ProviderCategory.Custom -> if (isChinese) "自定义协议" else "Custom protocol"
 }
 
 private fun defaultBaseUrl(protocol: ModelProtocol): String = when (protocol) {
