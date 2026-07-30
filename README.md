@@ -11,6 +11,7 @@ InkWisp is an Android Markdown editor built around inline prediction: pause, see
 - local full-text Workspace indexing, Wiki Link backlinks, and bounded Workspace Context
 - OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, Google Gemini, native DeepSeek/Mistral FIM, and custom OpenAI-compatible connections
 - independent inline-prediction routing with optional model/endpoint overrides and Code Llama, StarCoder, DeepSeek Coder, Qwen, Code Gemma, Codestral, and GLM prompt formats
+- protocol-aware model discovery with an in-app refresh button and a manual Model ID fallback
 - visible inline-prediction status and provider switching in the editor, Android Keystore-protected credentials, connection probes, and review-before-apply Assisted Edits
 - Markdown, HTML, PDF, and plain-text export
 - phone-language default (Chinese locales use Simplified Chinese; all others use English) with explicit English/Chinese switching

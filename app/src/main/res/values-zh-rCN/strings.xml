@@ -76,6 +76,9 @@
     <string name="validation_test_required">测试连接需要 Base URL、模型 ID 和 API Key。</string>
     <string name="connected_successfully">连接成功。</string>
     <string name="connection_failed">连接失败。</string>
+    <string name="validation_model_list_required">请先填写 Base URL 和所需的 API Key，再获取模型。</string>
+    <string name="models_loaded">已获取 %1$d 个模型。</string>
+    <string name="model_list_failed">无法获取模型，你仍可手动填写模型 ID。</string>
     <string name="workspace_required_for_attachment">请先打开工作区，再导入附件。</string>
     <string name="export_created">导出完成。</string>
     <string name="selection_changed">选区已经改变，请重新执行此操作。</string>

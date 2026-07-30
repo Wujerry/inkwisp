@@ -379,6 +379,8 @@ private fun InkWispApp(
                     onClose = { viewModel.showSettings(false) },
                     onSave = viewModel::saveConnection,
                     onTest = viewModel::testConnection,
+                    onLoadModels = viewModel::loadModels,
+                    onClearModels = viewModel::clearModelList,
                     onSelect = viewModel::selectConnection,
                     onDelete = viewModel::deleteConnection,
                     currentLanguage = currentLanguage,

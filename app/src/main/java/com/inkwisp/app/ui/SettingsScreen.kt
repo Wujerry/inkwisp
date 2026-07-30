@@ -22,8 +22,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -73,6 +75,8 @@ fun SettingsScreen(
     onClose: () -> Unit,
     onSave: (ConnectionDraft) -> Unit,
     onTest: (ConnectionDraft) -> Unit,
+    onLoadModels: (ConnectionDraft) -> Unit,
+    onClearModels: () -> Unit,
     onSelect: (String) -> Unit,
     onDelete: (String) -> Unit,
     currentLanguage: String,
@@ -84,6 +88,7 @@ fun SettingsScreen(
     var protocolExpanded by remember { mutableStateOf(false) }
     var predictionProtocolExpanded by remember { mutableStateOf(false) }
     var promptFormatExpanded by remember { mutableStateOf(false) }
+    var modelExpanded by remember { mutableStateOf(false) }
     var showAdvanced by remember { mutableStateOf(false) }
     val isChinese = LocalConfiguration.current.locales[0].language == "zh"
     val tr: (String, String) -> String = { english, chinese -> if (isChinese) chinese else english }
@@ -188,9 +193,15 @@ fun SettingsScreen(
                         selected = connection.id == state.selectedConnectionId,
                         onSelect = {
                             onSelect(connection.id)
-                            draft = connection.toDraft()
+                            val selectedDraft = connection.toDraft()
+                            draft = selectedDraft
+                            onLoadModels(selectedDraft)
                         },
-                        onEdit = { draft = connection.toDraft() },
+                        onEdit = {
+                            val selectedDraft = connection.toDraft()
+                            draft = selectedDraft
+                            onLoadModels(selectedDraft)
+                        },
                         onDelete = { onDelete(connection.id) },
                         isChinese = isChinese,
                     )
@@ -211,6 +222,7 @@ fun SettingsScreen(
                         TextButton(
                             onClick = {
                                 draft = ConnectionDraft(baseUrl = defaultBaseUrl(ModelProtocol.OpenAiChat))
+                                onClearModels()
                             },
                         ) { Text(tr("New", "新建")) }
                     }
@@ -252,7 +264,7 @@ fun SettingsScreen(
                                     }
                                 },
                                 onClick = {
-                                    draft = draft.copy(
+                                    val presetDraft = draft.copy(
                                         name = preset.name,
                                         protocol = preset.protocol,
                                         baseUrl = preset.baseUrl,
@@ -263,6 +275,9 @@ fun SettingsScreen(
                                         predictionModelId = preset.predictionModelId,
                                         promptFormat = preset.promptFormat,
                                     )
+                                    draft = presetDraft
+                                    onClearModels()
+                                    if (!preset.requiresApiKey) onLoadModels(presetDraft)
                                     if (preset.category == ProviderCategory.Custom) showAdvanced = true
                                     providerExpanded = false
                                 },
@@ -273,19 +288,11 @@ fun SettingsScreen(
             }
             item {
                 OutlinedTextField(
-                    value = draft.modelId,
-                    onValueChange = { draft = draft.copy(modelId = it) },
-                    label = { Text("Model ID") },
-                    placeholder = { Text(tr("Provider model identifier", "服务商模型标识")) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            item {
-                OutlinedTextField(
                     value = draft.apiKey,
-                    onValueChange = { draft = draft.copy(apiKey = it) },
+                    onValueChange = {
+                        draft = draft.copy(apiKey = it)
+                        onClearModels()
+                    },
                     label = { Text(if (draft.id == null) "API Key" else tr("API key (blank keeps current)", "API Key（留空则保留原值）")) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
@@ -293,6 +300,71 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            item {
+                Column {
+                    ExposedDropdownMenuBox(
+                        expanded = modelExpanded,
+                        onExpandedChange = { if (state.availableModels.isNotEmpty()) modelExpanded = it },
+                    ) {
+                        OutlinedTextField(
+                            value = draft.modelId,
+                            onValueChange = { draft = draft.copy(modelId = it) },
+                            label = { Text("Model ID") },
+                            placeholder = { Text(tr("Type or choose a model", "输入或选择模型")) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp),
+                            trailingIcon = {
+                                if (state.availableModels.isNotEmpty()) {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(modelExpanded)
+                                }
+                            },
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                                .fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(
+                            expanded = modelExpanded,
+                            onDismissRequest = { modelExpanded = false },
+                        ) {
+                            state.availableModels.forEach { model ->
+                                DropdownMenuItem(
+                                    text = { Text(model) },
+                                    onClick = {
+                                        draft = draft.copy(modelId = model)
+                                        modelExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    state.modelListMessage?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (state.availableModels.isNotEmpty()) {
+                                MaterialTheme.colorScheme.primary
+                            } else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, top = 4.dp),
+                        )
+                    }
+                    TextButton(
+                        onClick = { onLoadModels(draft) },
+                        enabled = !state.modelListLoading,
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        if (state.modelListLoading) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (state.modelListLoading) tr("Fetching…", "正在获取…")
+                            else tr("Fetch models", "获取模型列表"),
+                        )
+                    }
+                }
             }
             item {
                 TextButton(onClick = { showAdvanced = !showAdvanced }) {
@@ -371,6 +443,7 @@ fun SettingsScreen(
                                             defaultBaseUrl(protocol)
                                         } else draft.baseUrl,
                                     )
+                                    onClearModels()
                                     protocolExpanded = false
                                 },
                             )
@@ -381,7 +454,10 @@ fun SettingsScreen(
             item {
                 OutlinedTextField(
                     value = draft.baseUrl,
-                    onValueChange = { draft = draft.copy(baseUrl = it) },
+                    onValueChange = {
+                        draft = draft.copy(baseUrl = it)
+                        onClearModels()
+                    },
                     label = { Text("Base URL") },
                     supportingText = { Text(tr("HTTPS recommended. HTTP supports local services such as Ollama.", "推荐使用 HTTPS；Ollama 等本地服务可使用 HTTP。")) },
                     singleLine = true,

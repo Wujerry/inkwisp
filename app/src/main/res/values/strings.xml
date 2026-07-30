@@ -76,6 +76,9 @@
     <string name="validation_test_required">Base URL, Model ID, and the required API key are needed to test.</string>
     <string name="connected_successfully">Connected successfully.</string>
     <string name="connection_failed">Connection failed.</string>
+    <string name="validation_model_list_required">Enter the Base URL and required API key before loading models.</string>
+    <string name="models_loaded">Loaded %1$d models.</string>
+    <string name="model_list_failed">Could not load models. You can still enter a Model ID manually.</string>
     <string name="workspace_required_for_attachment">Open a workspace before importing attachments.</string>
     <string name="export_created">Export created.</string>
     <string name="selection_changed">The selection changed. Run the action again.</string>

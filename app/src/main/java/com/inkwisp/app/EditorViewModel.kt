@@ -54,6 +54,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var saveJob: Job? = null
     private var predictionJob: Job? = null
     private var indexingJob: Job? = null
+    private var modelListJob: Job? = null
     private var lastEditorRevision = -1L
 
     init {
@@ -286,6 +287,54 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         loadConnections()
     }
 
+    fun clearModelList() {
+        modelListJob?.cancel()
+        _uiState.update {
+            it.copy(
+                availableModels = emptyList(),
+                modelListLoading = false,
+                modelListMessage = null,
+            )
+        }
+    }
+
+    fun loadModels(draft: ConnectionDraft) {
+        val credential = draft.apiKey.ifBlank { draft.id?.let(connectionStore::credential).orEmpty() }
+        if (draft.baseUrl.isBlank() || (draft.requiresApiKey && credential.isBlank())) {
+            _uiState.update {
+                it.copy(
+                    availableModels = emptyList(),
+                    modelListMessage = appString(R.string.validation_model_list_required),
+                )
+            }
+            return
+        }
+        modelListJob?.cancel()
+        modelListJob = viewModelScope.launch {
+            _uiState.update { it.copy(modelListLoading = true, modelListMessage = null) }
+            val result = runCatching {
+                modelGateway.listModels(modelConnectionFor(draft, "catalog"), credential)
+            }
+            _uiState.update {
+                result.fold(
+                    onSuccess = { models -> it.copy(
+                        availableModels = models,
+                        modelListLoading = false,
+                        modelListMessage = appString(R.string.models_loaded, models.size),
+                    ) },
+                    onFailure = { failure -> it.copy(
+                        availableModels = emptyList(),
+                        modelListLoading = false,
+                        modelListMessage = listOfNotNull(
+                            appString(R.string.model_list_failed),
+                            failure.message,
+                        ).distinct().joinToString(" "),
+                    ) },
+                )
+            }
+        }
+    }
+
     fun testConnection(draft: ConnectionDraft) {
         val probeKey = draft.apiKey.ifBlank {
             draft.id?.let(connectionStore::credential).orEmpty()
@@ -296,21 +345,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             _uiState.update { it.copy(connectionTestInProgress = true, connectionTestMessage = null) }
-            val temporary = ModelConnection(
-                id = draft.id ?: "probe",
-                name = draft.name.ifBlank { "Probe" },
-                protocol = draft.protocol,
-                baseUrl = draft.baseUrl.trim().trimEnd('/'),
-                modelId = draft.modelId.trim(),
-                maxOutputTokens = 64,
-                temperature = 0.0,
-                requiresApiKey = draft.requiresApiKey,
-                predictionProtocol = draft.predictionProtocol,
-                predictionBaseUrl = draft.predictionBaseUrl.trim().trimEnd('/'),
-                predictionModelId = draft.predictionModelId.trim(),
-                promptFormat = draft.promptFormat,
-                predictionMaxOutputTokens = draft.predictionMaxOutputTokens,
-            )
+            val temporary = modelConnectionFor(draft, "probe")
             val result = runCatching {
                 modelGateway.probe(
                     temporary,
@@ -333,9 +368,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
+            val discoveredModels = if (result.isSuccess) {
+                runCatching { modelGateway.listModels(temporary, probeKey) }.getOrNull().orEmpty()
+            } else emptyList()
             _uiState.update {
                 it.copy(
                     connectionTestInProgress = false,
+                    availableModels = discoveredModels.ifEmpty { it.availableModels },
+                    modelListMessage = if (discoveredModels.isNotEmpty()) {
+                        appString(R.string.models_loaded, discoveredModels.size)
+                    } else it.modelListMessage,
                     connectionTestMessage = result.fold(
                         onSuccess = { appString(R.string.connected_successfully) },
                         onFailure = { failure ->
@@ -751,7 +793,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(errorMessage = error.message ?: appString(R.string.generic_error)) }
     }
 
-    private fun appString(id: Int): String = getApplication<Application>().getString(id)
+    private fun modelConnectionFor(draft: ConnectionDraft, fallbackId: String) = ModelConnection(
+        id = draft.id ?: fallbackId,
+        name = draft.name.ifBlank { "Model connection" },
+        protocol = draft.protocol,
+        baseUrl = draft.baseUrl.trim().trimEnd('/'),
+        modelId = draft.modelId.trim().ifBlank { "model-discovery" },
+        maxOutputTokens = 64,
+        temperature = 0.0,
+        requiresApiKey = draft.requiresApiKey,
+        predictionProtocol = draft.predictionProtocol,
+        predictionBaseUrl = draft.predictionBaseUrl.trim().trimEnd('/'),
+        predictionModelId = draft.predictionModelId.trim(),
+        promptFormat = draft.promptFormat,
+        predictionMaxOutputTokens = draft.predictionMaxOutputTokens,
+    )
+
+    private fun appString(id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
 
     private companion object {
         const val AUTO_SAVE_DELAY_MS = 650L

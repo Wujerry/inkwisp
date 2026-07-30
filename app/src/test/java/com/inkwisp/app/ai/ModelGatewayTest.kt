@@ -59,6 +59,38 @@ class ModelGatewayTest {
     }
 
     @Test
+    fun modelDiscoveryUsesProtocolAuthenticationAndParsesProviderShapes() {
+        val openAi = gateway.createModelListRequest(connection(ModelProtocol.OpenAiChat), "secret")
+        assertEquals("https://example.test/v1/models", openAi.url.toString())
+        assertEquals("Bearer secret", openAi.header("Authorization"))
+        assertEquals(
+            listOf("gpt-a", "gpt-b"),
+            gateway.parseModelListResponse(
+                ModelProtocol.OpenAiChat,
+                """{"data":[{"id":"gpt-b"},{"id":"gpt-a"}]}""",
+            ),
+        )
+
+        val anthropic = gateway.createModelListRequest(connection(ModelProtocol.AnthropicMessages), "secret")
+        assertEquals("secret", anthropic.header("x-api-key"))
+        assertEquals("2023-06-01", anthropic.header("anthropic-version"))
+
+        val gemini = gateway.createModelListRequest(connection(ModelProtocol.GoogleGemini), "secret")
+        assertEquals("secret", gemini.url.queryParameter("key"))
+        assertEquals("1000", gemini.url.queryParameter("pageSize"))
+        assertEquals(
+            listOf("gemini-flash"),
+            gateway.parseModelListResponse(
+                ModelProtocol.GoogleGemini,
+                """{"models":[
+                  {"baseModelId":"embedding-only","supportedGenerationMethods":["embedContent"]},
+                  {"name":"models/gemini-flash","supportedGenerationMethods":["generateContent"]}
+                ]}""",
+            ),
+        )
+    }
+
+    @Test
     fun parsesEverySupportedResponseShape() {
         assertEquals("chat", gateway.parseResponse(ModelProtocol.OpenAiChat, """{"choices":[{"message":{"content":"chat"}}]}"""))
         assertEquals("responses", gateway.parseResponse(ModelProtocol.OpenAiResponses, """{"output_text":"responses"}"""))

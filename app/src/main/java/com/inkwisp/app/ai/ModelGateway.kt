@@ -21,6 +21,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
@@ -104,6 +105,15 @@ class ModelGateway(
             throw ModelRequestException("The prediction endpoint returned no test text from ${request.url.host}.")
         }
         Unit
+    }
+
+    suspend fun listModels(
+        connection: ModelConnection,
+        apiKey: String,
+    ): List<String> = withContext(Dispatchers.IO) {
+        val request = createModelListRequest(connection, apiKey)
+        parseModelListResponse(connection.protocol, execute(request))
+            .ifEmpty { throw ModelRequestException("${request.url.host} returned no selectable models.") }
     }
 
     private fun execute(request: Request): String {
@@ -190,6 +200,40 @@ class ModelGateway(
             .build()
     }
 
+    internal fun createModelListRequest(
+        connection: ModelConnection,
+        apiKey: String,
+    ): Request {
+        require(connection.baseUrl.startsWith("https://") || connection.baseUrl.startsWith("http://")) {
+            "Base URL must begin with https:// or http://."
+        }
+        val endpoint = endpoint(connection.baseUrl, "models")
+        val url = if (connection.protocol == ModelProtocol.GoogleGemini) {
+            endpoint.toHttpUrl().newBuilder()
+                .addQueryParameter("pageSize", "1000")
+                .apply { if (apiKey.isNotBlank()) addQueryParameter("key", apiKey) }
+                .build()
+        } else endpoint.toHttpUrl()
+        return Request.Builder()
+            .url(url)
+            .get()
+            .header("Accept", "application/json")
+            .apply {
+                when (connection.protocol) {
+                    ModelProtocol.AnthropicMessages -> {
+                        if (apiKey.isNotBlank()) header("x-api-key", apiKey)
+                        header("anthropic-version", "2023-06-01")
+                    }
+                    ModelProtocol.GoogleGemini -> Unit
+                    ModelProtocol.OpenAiChat, ModelProtocol.OpenAiResponses -> {
+                        if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
+                    }
+                }
+                connection.headers.forEach { (name, value) -> header(name, value) }
+            }
+            .build()
+    }
+
     internal fun parseResponse(protocol: ModelProtocol, body: String): String {
         val root = json.parseToJsonElement(body).jsonObject
         return when (protocol) {
@@ -216,6 +260,29 @@ class ModelGateway(
         return first["text"]?.jsonPrimitive?.contentOrNull
             ?: first["message"]?.jsonObject?.get("content")?.jsonPrimitive?.contentOrNull
             ?: ""
+    }
+
+    internal fun parseModelListResponse(protocol: ModelProtocol, body: String): List<String> {
+        val root = json.parseToJsonElement(body).jsonObject
+        val models = if (protocol == ModelProtocol.GoogleGemini) {
+            root["models"]?.jsonArray.orEmpty().mapNotNull { element ->
+                val model = element.jsonObject
+                val methods = model["supportedGenerationMethods"]?.jsonArray
+                    ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                    .orEmpty()
+                if (methods.isNotEmpty() && "generateContent" !in methods) return@mapNotNull null
+                model["baseModelId"]?.jsonPrimitive?.contentOrNull
+                    ?: model["name"]?.jsonPrimitive?.contentOrNull?.removePrefix("models/")
+            }
+        } else {
+            val entries = root["data"]?.jsonArray ?: root["models"]?.jsonArray ?: JsonArray(emptyList())
+            entries.mapNotNull { element ->
+                val model = element.jsonObject
+                model["id"]?.jsonPrimitive?.contentOrNull
+                    ?: model["name"]?.jsonPrimitive?.contentOrNull?.removePrefix("models/")
+            }
+        }
+        return models.map(String::trim).filter(String::isNotEmpty).distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
 
     private fun openAiChatBody(connection: ModelConnection, input: CompletionInput): JsonObject = buildJsonObject {
