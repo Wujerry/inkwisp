@@ -151,12 +151,14 @@ Do not claim ephemeral processing for arbitrary custom providers. Whether third-
 
 ## 7. Store assets
 
-Required before production submission:
+Ready in `docs/google-play-assets/`:
 
-- [ ] 512 x 512, 32-bit PNG store icon, at most 1 MB. The current Play-facing `docs/assets/icon.png` is only 256 x 256; export a 512 x 512 version from `app/src/main/res/drawable-nodpi/ic_launcher_inkwash.png`.
-- [ ] 1024 x 500 JPEG or 24-bit PNG feature graphic.
-- [ ] At least 2 phone screenshots; prepare 4 to 6 showing onboarding, instant-render editing, inline prediction, workspace management, model selection, and assisted-edit review.
-- [ ] Avoid API keys, endpoint credentials, emulator debug overlays, misleading rankings, prices, or unsupported claims in every asset.
+- [x] 512 x 512, 32-bit PNG store icon, at most 1 MB: `icon-512.png`.
+- [x] 1024 x 500 PNG feature graphic: `feature-graphic-1024x500.png`.
+- [x] Three 1080 x 2400 phone screenshots showing the WYSIWYG editor, AI assistance, and model connection/model discovery UI.
+- [x] Checked for API keys, endpoint credentials, emulator debug overlays, misleading rankings, prices, and unsupported claims.
+
+See `docs/google-play-assets/README.md` for the exact Play Console upload mapping.
 
 ## 8. Developer-account information you must supply
 
