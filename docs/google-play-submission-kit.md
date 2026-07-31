@@ -155,7 +155,9 @@ Ready in `docs/google-play-assets/`:
 
 - [x] 512 x 512, 32-bit PNG store icon, at most 1 MB: `icon-512.png`.
 - [x] 1024 x 500 PNG feature graphic: `feature-graphic-1024x500.png`.
-- [x] Three 1080 x 2400 phone screenshots showing the WYSIWYG editor, AI assistance, and model connection/model discovery UI.
+- [x] Four English and four Simplified Chinese phone screenshots at 1080 x 1920 (9:16), including first launch, WYSIWYG editing, AI assistance, and model discovery.
+- [x] Four English and four Simplified Chinese 7-inch tablet screenshots at 1260 x 2240 (9:16), using the real 630dp tablet layout.
+- [x] Emulator navigation bars are excluded from every screenshot without stretching the app UI.
 - [x] Checked for API keys, endpoint credentials, emulator debug overlays, misleading rankings, prices, and unsupported claims.
 
 See `docs/google-play-assets/README.md` for the exact Play Console upload mapping.
