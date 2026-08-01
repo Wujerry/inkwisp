@@ -50,6 +50,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -116,6 +117,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -133,6 +136,7 @@ import com.inkwisp.app.model.titleWithoutMarkdownExtension
 import com.inkwisp.app.model.applicationLocaleTags
 import com.inkwisp.app.ui.theme.InkWispTheme
 import com.inkwisp.app.ui.SettingsScreen
+import com.inkwisp.app.ui.editorLayoutPolicy
 import com.inkwisp.app.export.ExportFormat
 import kotlinx.coroutines.launch
 
@@ -263,6 +267,14 @@ private fun InkWispApp(
     )
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val editorController = remember { EditorController() }
+    val focusManager = LocalFocusManager.current
+    val softwareKeyboard = LocalSoftwareKeyboardController.current
+    val dismissInput = {
+        editorController.dismissInput()
+        focusManager.clearFocus(force = true)
+        softwareKeyboard?.hide()
+    }
 
     BackHandler(enabled = state.showSettings) { viewModel.showSettings(false) }
 
@@ -281,73 +293,101 @@ private fun InkWispApp(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 840.dp
-        if (wide) {
-            Row(Modifier.fillMaxSize()) {
-                WorkspacePanel(
-                    state = state,
-                    onOpenWorkspace = onOpenWorkspace,
-                    onOpenManagedWorkspace = onOpenManagedWorkspace,
-                    onOpenDocument = onOpenDocument,
-                    onNewDocument = onNewDocument,
-                    onFileSelected = { viewModel.openDocument(it.uri, it.name) },
-                    onDeleteDocument = viewModel::deleteDocument,
-                    onSearch = viewModel::setSearchQuery,
-                    onSettings = { viewModel.showSettings(true) },
-                    modifier = Modifier.width(300.dp).fillMaxHeight(),
-                )
-                HorizontalDivider(
-                    modifier = Modifier.fillMaxHeight().width(1.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                )
-                EditorSurface(
-                    state = state,
-                    darkTheme = darkTheme,
-                    reducedMotion = reducedMotion,
-                    onMenu = {},
-                    onModeChange = viewModel::setMode,
-                    onContentChanged = viewModel::onEditorChanged,
-                    onEditorCommand = viewModel::handleEditorCommand,
-                    onInsertionHandled = viewModel::insertionHandled,
-                    onSave = viewModel::saveNow,
-                    onSelectConnection = viewModel::selectConnection,
-                    onModelSettings = { viewModel.showSettings(true) },
-                    onInsertImage = onInsertImage,
-                    onExport = { format ->
-                        onExport(format, state.activeDocument?.title ?: "document.md")
-                    },
-                    showMenu = false,
-                    modifier = Modifier.weight(1f),
-                )
+        val layout = editorLayoutPolicy(maxWidth.value.toInt(), maxHeight.value.toInt())
+        LaunchedEffect(layout.persistentWorkspace) {
+            if (layout.persistentWorkspace) {
+                viewModel.toggleDrawer(false)
+                drawerState.close()
             }
-        } else {
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                gesturesEnabled = drawerState.isOpen,
-                drawerContent = {
+        }
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = !layout.persistentWorkspace && drawerState.isOpen,
+            drawerContent = {
+                if (!layout.persistentWorkspace) {
                     ModalDrawerSheet(
                         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        modifier = Modifier.width(318.dp),
+                        modifier = Modifier.width(layout.workspaceWidthDp.dp),
                     ) {
                         WorkspacePanel(
                             state = state,
                             onOpenWorkspace = onOpenWorkspace,
                             onOpenManagedWorkspace = onOpenManagedWorkspace,
                             onOpenDocument = onOpenDocument,
-                            onNewDocument = onNewDocument,
+                            onNewDocument = {
+                                dismissInput()
+                                onNewDocument()
+                            },
                             onFileSelected = {
+                                dismissInput()
                                 viewModel.openDocument(it.uri, it.name)
                                 scope.launch { drawerState.close() }
                             },
                             onDeleteDocument = viewModel::deleteDocument,
                             onSearch = viewModel::setSearchQuery,
-                            onSettings = { viewModel.showSettings(true) },
+                            onSettings = {
+                                dismissInput()
+                                viewModel.showSettings(true)
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                },
-            ) {
+                }
+            },
+        ) {
+            Row(Modifier.fillMaxSize()) {
+                if (layout.persistentWorkspace) {
+                    WorkspacePanel(
+                        state = state,
+                        onOpenWorkspace = onOpenWorkspace,
+                        onOpenManagedWorkspace = onOpenManagedWorkspace,
+                        onOpenDocument = onOpenDocument,
+                        onNewDocument = {
+                            dismissInput()
+                            onNewDocument()
+                        },
+                        onFileSelected = { viewModel.openDocument(it.uri, it.name) },
+                        onDeleteDocument = viewModel::deleteDocument,
+                        onSearch = viewModel::setSearchQuery,
+                        onSettings = {
+                            dismissInput()
+                            viewModel.showSettings(true)
+                        },
+                        modifier = Modifier
+                            .width(layout.workspaceWidthDp.dp)
+                            .fillMaxHeight()
+                            .statusBarsPadding()
+                            .navigationBarsPadding(),
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxHeight().width(1.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                    )
+                } else if (layout.isTablet) {
+                    CompactWorkspaceRail(
+                        onWorkspace = {
+                            dismissInput()
+                            scope.launch {
+                                drawerState.open()
+                                dismissInput()
+                            }
+                        },
+                        onNewDocument = {
+                            dismissInput()
+                            onNewDocument()
+                        },
+                        onSettings = {
+                            dismissInput()
+                            viewModel.showSettings(true)
+                        },
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxHeight().width(1.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.36f),
+                    )
+                }
                 EditorSurface(
+                    editorController = editorController,
                     state = state,
                     darkTheme = darkTheme,
                     reducedMotion = reducedMotion,
@@ -363,8 +403,9 @@ private fun InkWispApp(
                     onExport = { format ->
                         onExport(format, state.activeDocument?.title ?: "document.md")
                     },
-                    showMenu = true,
-                    modifier = Modifier.fillMaxSize(),
+                    showMenu = !layout.isTablet,
+                    compactChrome = layout.compactChrome,
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -530,6 +571,7 @@ private fun OnboardingScreen(onStart: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditorSurface(
+    editorController: EditorController,
     state: EditorUiState,
     darkTheme: Boolean,
     reducedMotion: Boolean,
@@ -544,9 +586,9 @@ private fun EditorSurface(
     onInsertImage: () -> Unit,
     onExport: (ExportFormat) -> Unit,
     showMenu: Boolean,
+    compactChrome: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val editorController = remember { EditorController() }
     Scaffold(
         modifier = modifier.imePadding(),
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -568,6 +610,7 @@ private fun EditorSurface(
                     onModelSettings()
                 },
                 reducedMotion = reducedMotion,
+                compact = compactChrome,
             )
         },
         bottomBar = {
@@ -575,6 +618,7 @@ private fun EditorSurface(
                 onCommand = editorController::runFormatCommand,
                 onAssistedEdit = editorController::requestAssistedEdit,
                 onInsertImage = onInsertImage,
+                compact = compactChrome,
                 modifier = Modifier.navigationBarsPadding(),
             )
         },
@@ -632,6 +676,7 @@ private fun DocumentHeader(
     onSelectConnection: (String) -> Unit,
     onModelSettings: () -> Unit,
     reducedMotion: Boolean,
+    compact: Boolean,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -639,7 +684,8 @@ private fun DocumentHeader(
     ) {
         Column(Modifier.windowInsetsPadding(WindowInsets.statusBars)) {
             Row(
-                modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth().height(if (compact) 54.dp else 64.dp)
+                    .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (showMenu) {
@@ -673,8 +719,9 @@ private fun DocumentHeader(
                     onSelect = onSelectConnection,
                     onSettings = onModelSettings,
                     reducedMotion = reducedMotion,
+                    compact = compact,
                 )
-                HeaderModeToggle(mode = state.editorMode, onModeChange = onModeChange)
+                HeaderModeToggle(mode = state.editorMode, onModeChange = onModeChange, compact = compact)
                 ExportMenu(onSave = onSave, onExport = onExport)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
@@ -688,6 +735,7 @@ private fun PredictionConnectionChip(
     onSelect: (String) -> Unit,
     onSettings: () -> Unit,
     reducedMotion: Boolean,
+    compact: Boolean,
 ) {
     var expanded by remember { mutableStateOf(false) }
     val connection = state.selectedConnection
@@ -716,7 +764,7 @@ private fun PredictionConnectionChip(
     Box {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(if (compact) 38.dp else 42.dp)
                 .graphicsLayer {
                     val scale = if (!reducedMotion && state.predictionState == PredictionState.Ready) pulse else 1f
                     scaleX = scale
@@ -846,6 +894,42 @@ private fun ExportMenu(onSave: () -> Unit, onExport: (ExportFormat) -> Unit) {
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactWorkspaceRail(
+    onWorkspace: () -> Unit,
+    onNewDocument: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .width(72.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_launcher_inkwash),
+            contentDescription = null,
+            modifier = Modifier.size(42.dp),
+        )
+        Spacer(Modifier.height(14.dp))
+        IconButton(onClick = onWorkspace, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.workspace))
+        }
+        Spacer(Modifier.height(4.dp))
+        IconButton(onClick = onNewDocument, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.new_document))
+        }
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
+            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
         }
     }
 }
@@ -1315,22 +1399,26 @@ private fun EditingToolbar(
     onCommand: (String) -> Unit,
     onAssistedEdit: (String) -> Unit,
     onInsertImage: () -> Unit,
+    compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background),
     ) {
         Surface(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+            modifier = Modifier.fillMaxWidth().padding(
+                horizontal = 10.dp,
+                vertical = if (compact) 3.dp else 7.dp,
+            ),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(if (compact) 14.dp else 18.dp),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             tonalElevation = 1.dp,
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 7.dp, vertical = 6.dp),
+                    .padding(horizontal = 7.dp, vertical = if (compact) 2.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
@@ -1419,7 +1507,7 @@ private fun InkIconTool(
 }
 
 @Composable
-private fun HeaderModeToggle(mode: EditorMode, onModeChange: (EditorMode) -> Unit) {
+private fun HeaderModeToggle(mode: EditorMode, onModeChange: (EditorMode) -> Unit, compact: Boolean) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -1429,7 +1517,7 @@ private fun HeaderModeToggle(mode: EditorMode, onModeChange: (EditorMode) -> Uni
     )
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(if (compact) 38.dp else 40.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(

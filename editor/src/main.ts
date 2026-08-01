@@ -16,6 +16,12 @@ import {
 import { GFM } from "@lezer/markdown";
 import { formatSelection, type FormatCommand } from "./format";
 import { closingInlineDelimiter, normalizedHeadingInsertion, smartBlockEnter } from "./instant";
+import {
+  classifyPredictionDragIntent,
+  classifyPredictionSwipe,
+  type PredictionDragIntent,
+  type PredictionSwipePoint,
+} from "./prediction";
 
 declare global {
   interface Window {
@@ -59,16 +65,115 @@ class PredictionWidget extends WidgetType {
     return other.text === this.text;
   }
 
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const span = document.createElement("span");
     span.className = "iw-prediction";
     span.textContent = this.text;
     span.setAttribute("aria-label", `Prediction: ${this.text}`);
+    let pointerId: number | null = null;
+    let pointerStart: PredictionSwipePoint | null = null;
+    let touchIdentifier: number | null = null;
+    let touchStart: PredictionSwipePoint | null = null;
+    let touchIntent: PredictionDragIntent = "pending";
+
+    const consume = (event: PointerEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const reset = (): void => {
+      if (touchIdentifier === null) span.classList.remove("is-swiping");
+      try {
+        if (pointerId !== null && span.hasPointerCapture(pointerId)) {
+          span.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // The widget can be detached while a gesture is finishing.
+      }
+      pointerId = null;
+      pointerStart = null;
+    };
+    const resetTouch = (): void => {
+      span.classList.remove("is-swiping");
+      touchIdentifier = null;
+      touchStart = null;
+      touchIntent = "pending";
+    };
+
+    span.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "touch" || !event.isPrimary || event.button > 0) return;
+      pointerId = event.pointerId;
+      pointerStart = { x: event.clientX, y: event.clientY };
+      span.classList.add("is-swiping");
+      try {
+        span.setPointerCapture(event.pointerId);
+      } catch {
+        // Older WebViews may reject capture; the local handlers still work.
+      }
+      consume(event);
+    });
+    span.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== pointerId) return;
+      consume(event);
+    });
+    span.addEventListener("pointerup", (event) => {
+      if (event.pointerId !== pointerId || !pointerStart) return;
+      const result = classifyPredictionSwipe(pointerStart, { x: event.clientX, y: event.clientY });
+      consume(event);
+      reset();
+      if (result === "accept") acceptPrediction(view, "all");
+    });
+    span.addEventListener("pointercancel", (event) => {
+      if (event.pointerId !== pointerId) return;
+      consume(event);
+      reset();
+    });
+    span.addEventListener("touchstart", (event) => {
+      const touch = event.changedTouches[0];
+      if (!touch || touchIdentifier !== null) return;
+      touchIdentifier = touch.identifier;
+      touchStart = { x: touch.clientX, y: touch.clientY };
+    }, { passive: false });
+    span.addEventListener("touchmove", (event) => {
+      if (touchIdentifier === null || !touchStart) return;
+      const touch = Array.from(event.touches).find((item) => item.identifier === touchIdentifier);
+      if (!touch) return;
+      if (touchIntent === "pending") {
+        touchIntent = classifyPredictionDragIntent(touchStart, { x: touch.clientX, y: touch.clientY });
+        if (touchIntent === "vertical") {
+          resetTouch();
+          return;
+        }
+        if (touchIntent === "horizontal") span.classList.add("is-swiping");
+      }
+      if (touchIntent !== "horizontal") return;
+      event.preventDefault();
+      event.stopPropagation();
+    }, { passive: false });
+    span.addEventListener("touchend", (event) => {
+      if (touchIdentifier === null || !touchStart) return;
+      const touch = Array.from(event.changedTouches).find((item) => item.identifier === touchIdentifier);
+      if (!touch) return;
+      const result = touchIntent === "horizontal"
+        ? classifyPredictionSwipe(touchStart, { x: touch.clientX, y: touch.clientY })
+        : "ignore";
+      if (touchIntent === "horizontal") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      resetTouch();
+      if (result === "accept") acceptPrediction(view, "all");
+    }, { passive: false });
+    span.addEventListener("touchcancel", (event) => {
+      if (touchIdentifier === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      resetTouch();
+    }, { passive: false });
     return span;
   }
 
   ignoreEvent(): boolean {
-    return false;
+    return true;
   }
 }
 
@@ -228,8 +333,6 @@ const instantRender = ViewPlugin.fromClass(
 );
 
 let nativeRevision = 0;
-let pointerStart: { x: number; y: number } | null = null;
-
 function scheduleKeyboardSafeScroll(target: EditorView): void {
   window.setTimeout(() => {
     if (!target.hasFocus) return;
@@ -258,9 +361,6 @@ const state = EditorState.create({
         key: "ArrowRight",
         run: (view) => moveOutsideClosingDelimiter(view),
       },
-      ...defaultKeymap,
-      ...historyKeymap,
-      indentWithTab,
       {
         key: "Tab",
         run: (view) => acceptPrediction(view, "all"),
@@ -269,6 +369,9 @@ const state = EditorState.create({
         key: "Escape",
         run: (view) => clearPrediction(view),
       },
+      ...defaultKeymap,
+      ...historyKeymap,
+      indentWithTab,
     ]),
     predictionField,
     modeCompartment.of([instantRender, EditorView.editorAttributes.of({ class: "iw-instant" })]),
@@ -345,17 +448,6 @@ const state = EditorState.create({
         if (!handled) return false;
         event.preventDefault();
         return true;
-      },
-      pointerdown(event) {
-        pointerStart = { x: event.clientX, y: event.clientY };
-        return false;
-      },
-      pointerup(event, view) {
-        if (!pointerStart) return false;
-        const deltaX = event.clientX - pointerStart.x;
-        const deltaY = Math.abs(event.clientY - pointerStart.y);
-        pointerStart = null;
-        return deltaX > 72 && deltaY < 48 ? acceptPrediction(view, "all") : false;
       },
     }),
     EditorView.theme({

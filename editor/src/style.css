@@ -21,6 +21,9 @@
   --ink: #211f1b;
   --muted: #706d66;
   --accent: #b84c38;
+  --prediction: #9b665b;
+  --prediction-line: rgba(184, 76, 56, 0.38);
+  --prediction-active: rgba(184, 76, 56, 0.08);
   --hairline: rgba(33, 31, 27, 0.12);
   --code: rgba(33, 31, 27, 0.06);
 }
@@ -32,6 +35,9 @@
   --ink: #f1ece2;
   --muted: #bdb7ae;
   --accent: #e18b79;
+  --prediction: #d39a8e;
+  --prediction-line: rgba(225, 139, 121, 0.46);
+  --prediction-active: rgba(225, 139, 121, 0.12);
   --hairline: rgba(241, 236, 226, 0.14);
   --code: rgba(241, 236, 226, 0.08);
 }
@@ -208,12 +214,23 @@ body::before {
   background: var(--hairline);
 }
 
-.iw-prediction {
-  color: color-mix(in srgb, var(--muted) 58%, transparent);
-  -webkit-text-fill-color: color-mix(in srgb, var(--muted) 58%, transparent);
+.cm-line .iw-prediction {
+  color: var(--prediction) !important;
+  -webkit-text-fill-color: var(--prediction) !important;
+  opacity: 0.72;
+  border-bottom: 1px dashed var(--prediction-line);
   white-space: pre-wrap;
-  pointer-events: none;
+  pointer-events: auto;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
   animation: prediction-in 180ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.cm-line .iw-prediction.is-swiping {
+  opacity: 0.9;
+  background: var(--prediction-active);
 }
 
 :root[data-reduced-motion="true"] .iw-prediction {
@@ -230,8 +247,8 @@ body::before {
 }
 
 @keyframes prediction-in {
-  from { opacity: 0; transform: translateY(2px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { transform: translateY(2px); }
+  to { transform: translateY(0); }
 }
 
 @keyframes ink-caret {
